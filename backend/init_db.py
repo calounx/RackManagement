@@ -11,7 +11,8 @@ from app.models import (
     Connection,
     WidthType,
     SourceType,
-    ConfidenceLevel
+    ConfidenceLevel,
+    AirflowPattern
 )
 from sqlalchemy.orm import Session
 
@@ -39,6 +40,8 @@ def seed_sample_data():
                 weight_kg=4.1,
                 power_watts=25,
                 heat_output_btu=85,
+                airflow_pattern=AirflowPattern.FRONT_TO_BACK,
+                max_operating_temp_c=45.0,
                 typical_ports={"gigabit_ethernet": 48, "sfp": 2, "console": 1},
                 mounting_type="4-post",
                 source=SourceType.MANUFACTURER_SPEC,
@@ -53,6 +56,8 @@ def seed_sample_data():
                 weight_kg=3.8,
                 power_watts=45,
                 heat_output_btu=153,
+                airflow_pattern=AirflowPattern.FRONT_TO_BACK,
+                max_operating_temp_c=40.0,
                 typical_ports={"gigabit_ethernet": 48, "sfp_plus": 4},
                 mounting_type="2-post",
                 source=SourceType.MANUFACTURER_SPEC,
@@ -67,6 +72,8 @@ def seed_sample_data():
                 weight_kg=7.7,
                 power_watts=110,
                 heat_output_btu=375,
+                airflow_pattern=AirflowPattern.FRONT_TO_BACK,
+                max_operating_temp_c=55.0,
                 typical_ports={"gigabit_ethernet": 48, "qsfp_plus": 4},
                 mounting_type="4-post",
                 source=SourceType.MANUFACTURER_SPEC,

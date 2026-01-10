@@ -50,6 +50,21 @@ class CableType(str, enum.Enum):
     CONSOLE = "Console"
 
 
+class AirflowPattern(str, enum.Enum):
+    """Device airflow patterns"""
+    FRONT_TO_BACK = "front_to_back"
+    BACK_TO_FRONT = "back_to_front"
+    SIDE_TO_SIDE = "side_to_side"
+    PASSIVE = "passive"  # No active cooling
+
+
+class ThermalZone(str, enum.Enum):
+    """Thermal zones within a rack"""
+    BOTTOM = "bottom"  # U1-U14 (coolest - intake air)
+    MIDDLE = "middle"  # U15-U28 (moderate)
+    TOP = "top"  # U29-U42 (warmest - heat rises)
+
+
 class RoutingPath(str, enum.Enum):
     """Cable routing method"""
     DIRECT = "direct"
@@ -75,6 +90,8 @@ class DeviceSpecification(Base):
     # Power and thermal
     power_watts = Column(Float, nullable=True)
     heat_output_btu = Column(Float, nullable=True)
+    airflow_pattern = Column(Enum(AirflowPattern), default=AirflowPattern.FRONT_TO_BACK)
+    max_operating_temp_c = Column(Float, nullable=True)  # Maximum operating temperature
 
     # Ports (JSON field)
     typical_ports = Column(JSON, nullable=True)  # {"gigabit_ethernet": 48, "sfp": 2, ...}
@@ -133,8 +150,12 @@ class Rack(Base):
     max_weight_kg = Column(Float, default=500.0)
     max_power_watts = Column(Float, default=5000.0)
 
-    # Cooling
+    # Thermal and cooling
     cooling_type = Column(String, default="front-to-back")  # "front-to-back", "bottom-to-top"
+    cooling_capacity_btu = Column(Float, default=17000.0)  # ~5 tons = 17,000 BTU/hr
+    ambient_temp_c = Column(Float, default=22.0)  # Data center ambient temperature
+    max_inlet_temp_c = Column(Float, default=27.0)  # ASHRAE recommended max inlet temp
+    airflow_cfm = Column(Float, nullable=True)  # Cubic feet per minute airflow
 
     # Relationships
     positions = relationship("RackPosition", back_populates="rack", cascade="all, delete-orphan")

@@ -5,6 +5,8 @@ Main FastAPI application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .api import device_specs, devices, racks, connections
+
 app = FastAPI(
     title="HomeRack API",
     description="Network device rack optimization and cable management system",
@@ -18,6 +20,28 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Include API routers
+app.include_router(
+    device_specs.router,
+    prefix="/api/device-specs",
+    tags=["Device Specifications"]
+)
+app.include_router(
+    devices.router,
+    prefix="/api/devices",
+    tags=["Devices"]
+)
+app.include_router(
+    racks.router,
+    prefix="/api/racks",
+    tags=["Racks"]
+)
+app.include_router(
+    connections.router,
+    prefix="/api/connections",
+    tags=["Connections"]
 )
 
 @app.get("/")

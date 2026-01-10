@@ -2,7 +2,7 @@
 Pydantic schemas for API request/response validation
 """
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -51,6 +51,21 @@ class RoutingPath(str, Enum):
     CONDUIT = "conduit"
 
 
+class AirflowPattern(str, Enum):
+    """Device airflow patterns"""
+    FRONT_TO_BACK = "front_to_back"
+    BACK_TO_FRONT = "back_to_front"
+    SIDE_TO_SIDE = "side_to_side"
+    PASSIVE = "passive"
+
+
+class ThermalZone(str, Enum):
+    """Thermal zones within a rack"""
+    BOTTOM = "bottom"
+    MIDDLE = "middle"
+    TOP = "top"
+
+
 # Device Specification Schemas
 class DeviceSpecificationBase(BaseModel):
     """Base device specification schema"""
@@ -63,6 +78,8 @@ class DeviceSpecificationBase(BaseModel):
     weight_kg: Optional[float] = Field(None, ge=0, le=500)
     power_watts: Optional[float] = Field(None, ge=0, le=10000)
     heat_output_btu: Optional[float] = Field(None, ge=0)
+    airflow_pattern: Optional[AirflowPattern] = AirflowPattern.FRONT_TO_BACK
+    max_operating_temp_c: Optional[float] = Field(None, ge=-20, le=100)
     typical_ports: Optional[Dict[str, int]] = None
     mounting_type: Optional[str] = None
 
@@ -79,6 +96,25 @@ class DeviceSpecificationCreate(DeviceSpecificationBase):
     """Schema for creating device specification"""
     source: SourceType = SourceType.USER_CUSTOM
     confidence: ConfidenceLevel = ConfidenceLevel.MEDIUM
+
+
+class DeviceSpecificationUpdate(BaseModel):
+    """Schema for updating device specification"""
+    brand: Optional[str] = Field(None, min_length=1, max_length=100)
+    model: Optional[str] = Field(None, min_length=1, max_length=100)
+    variant: Optional[str] = None
+    height_u: Optional[float] = Field(None, ge=0, le=50)
+    width_type: Optional[WidthType] = None
+    depth_mm: Optional[float] = Field(None, ge=0, le=1500)
+    weight_kg: Optional[float] = Field(None, ge=0, le=500)
+    power_watts: Optional[float] = Field(None, ge=0, le=10000)
+    heat_output_btu: Optional[float] = Field(None, ge=0)
+    airflow_pattern: Optional[AirflowPattern] = None
+    max_operating_temp_c: Optional[float] = Field(None, ge=-20, le=100)
+    typical_ports: Optional[Dict[str, int]] = None
+    mounting_type: Optional[str] = None
+    source: Optional[SourceType] = None
+    confidence: Optional[ConfidenceLevel] = None
 
 
 class DeviceSpecificationResponse(DeviceSpecificationBase):
@@ -103,7 +139,7 @@ class DeviceSpecificationFetch(BaseModel):
 # Device Schemas
 class DeviceBase(BaseModel):
     """Base device schema"""
-    custom_name: str = Field(..., min_length=1, max_length=200)
+    custom_name: Optional[str] = Field(None, min_length=1, max_length=200)
     access_frequency: AccessFrequency = AccessFrequency.MEDIUM
     notes: Optional[str] = None
 
@@ -113,20 +149,26 @@ class DeviceCreate(DeviceBase):
     specification_id: int = Field(..., gt=0)
 
 
+class DeviceUpdate(BaseModel):
+    """Schema for updating device"""
+    custom_name: Optional[str] = Field(None, min_length=1, max_length=200)
+    access_frequency: Optional[AccessFrequency] = None
+    notes: Optional[str] = None
+
+
 class DeviceQuickAdd(BaseModel):
     """Schema for quick adding devices by brand/model"""
     brand: str
     model: str
-    quantity: int = Field(1, ge=1, le=100)
+    custom_name: Optional[str] = None
     access_frequency: AccessFrequency = AccessFrequency.MEDIUM
+    notes: Optional[str] = None
 
 
 class DeviceResponse(DeviceBase):
     """Schema for device response"""
     id: int
     specification_id: int
-    brand: str
-    model: str
     specification: DeviceSpecificationResponse
 
     class Config:
@@ -144,11 +186,31 @@ class RackBase(BaseModel):
     max_weight_kg: float = Field(500.0, ge=0, le=2000)
     max_power_watts: float = Field(5000.0, ge=0, le=50000)
     cooling_type: str = "front-to-back"
+    cooling_capacity_btu: float = Field(17000.0, ge=0, le=100000)
+    ambient_temp_c: float = Field(22.0, ge=10, le=35)
+    max_inlet_temp_c: float = Field(27.0, ge=15, le=40)
+    airflow_cfm: Optional[float] = Field(None, ge=0)
 
 
 class RackCreate(RackBase):
     """Schema for creating rack"""
     pass
+
+
+class RackUpdate(BaseModel):
+    """Schema for updating rack"""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    location: Optional[str] = None
+    total_height_u: Optional[int] = Field(None, ge=1, le=100)
+    width_inches: Optional[WidthType] = None
+    depth_mm: Optional[float] = Field(None, ge=200, le=1500)
+    max_weight_kg: Optional[float] = Field(None, ge=0, le=2000)
+    max_power_watts: Optional[float] = Field(None, ge=0, le=50000)
+    cooling_type: Optional[str] = None
+    cooling_capacity_btu: Optional[float] = Field(None, ge=0, le=100000)
+    ambient_temp_c: Optional[float] = Field(None, ge=10, le=35)
+    max_inlet_temp_c: Optional[float] = Field(None, ge=15, le=40)
+    airflow_cfm: Optional[float] = Field(None, ge=0)
 
 
 class RackResponse(RackBase):
@@ -159,11 +221,77 @@ class RackResponse(RackBase):
         from_attributes = True
 
 
+class RackLayoutResponse(BaseModel):
+    """Schema for rack layout with positioned devices"""
+    rack: RackResponse
+    positions: List['RackPositionResponse']
+    utilization_percent: float
+    total_weight_kg: float
+    total_power_watts: float
+
+    class Config:
+        from_attributes = True
+
+
+# Thermal Analysis Schemas
+class ThermalHeatDistribution(BaseModel):
+    """Heat distribution across thermal zones"""
+    total_heat_btu_hr: float
+    total_power_watts: float
+    bottom_zone_btu: float
+    middle_zone_btu: float
+    top_zone_btu: float
+    device_count: int
+
+
+class ThermalCoolingEfficiency(BaseModel):
+    """Cooling system efficiency metrics"""
+    cooling_capacity_btu_hr: float
+    cooling_capacity_tons: float
+    heat_load_btu_hr: float
+    utilization_percent: float
+    remaining_capacity_btu_hr: float
+    remaining_capacity_tons: float
+    status: str  # "optimal", "acceptable", "warning", "critical"
+
+
+class ThermalHotSpot(BaseModel):
+    """High-heat device identification"""
+    device_id: int
+    device_name: str
+    position: str
+    zone: str
+    heat_output_btu_hr: float
+    power_watts: float
+    airflow_pattern: str
+    severity: str  # "high", "medium", "low"
+
+
+class ThermalAirflowConflict(BaseModel):
+    """Airflow pattern conflict between devices"""
+    type: str
+    severity: str
+    device1: Dict[str, Any]
+    device2: Dict[str, Any]
+    message: str
+
+
+class ThermalAnalysisResponse(BaseModel):
+    """Complete thermal analysis for a rack"""
+    rack_id: int
+    rack_name: str
+    heat_distribution: ThermalHeatDistribution
+    cooling_efficiency: ThermalCoolingEfficiency
+    hot_spots: List[ThermalHotSpot]
+    airflow_conflicts: List[ThermalAirflowConflict]
+    recommendations: List[str]
+    timestamp: datetime
+
+
 # Rack Position Schemas
 class RackPositionBase(BaseModel):
     """Base rack position schema"""
     device_id: int
-    rack_id: int
     start_u: int = Field(..., ge=1, le=100)
     locked: bool = False
 
@@ -173,9 +301,13 @@ class RackPositionCreate(RackPositionBase):
     pass
 
 
-class RackPositionResponse(RackPositionBase):
+class RackPositionResponse(BaseModel):
     """Schema for rack position response"""
     id: int
+    device_id: int
+    rack_id: int
+    start_u: int
+    locked: bool
     device: DeviceResponse
 
     class Config:
@@ -190,7 +322,9 @@ class ConnectionBase(BaseModel):
     from_port: Optional[str] = None
     to_port: Optional[str] = None
     cable_type: CableType = CableType.CAT6
-    routing_path: RoutingPath = RoutingPath.DIRECT
+    cable_length_m: Optional[float] = Field(None, ge=0)
+    routing_path: Optional[RoutingPath] = RoutingPath.DIRECT
+    notes: Optional[str] = None
 
 
 class ConnectionCreate(ConnectionBase):
@@ -198,11 +332,29 @@ class ConnectionCreate(ConnectionBase):
     pass
 
 
-class ConnectionResponse(ConnectionBase):
+class ConnectionUpdate(BaseModel):
+    """Schema for updating connection"""
+    from_port: Optional[str] = None
+    to_port: Optional[str] = None
+    cable_type: Optional[CableType] = None
+    cable_length_m: Optional[float] = Field(None, ge=0)
+    routing_path: Optional[RoutingPath] = None
+    notes: Optional[str] = None
+
+
+class ConnectionResponse(BaseModel):
     """Schema for connection response"""
     id: int
-    cable_category_required: Optional[str]
-    calculated_length_m: Optional[float]
+    from_device_id: int
+    to_device_id: int
+    from_port: Optional[str]
+    to_port: Optional[str]
+    cable_type: CableType
+    cable_length_m: Optional[float]
+    routing_path: Optional[RoutingPath]
+    notes: Optional[str]
+    from_device: DeviceResponse
+    to_device: DeviceResponse
 
     class Config:
         from_attributes = True
@@ -245,7 +397,7 @@ class OptimizationResult(BaseModel):
     positions: List[RackPositionResponse]
     score: ScoreBreakdown
     improvements: List[str]
-    metadata: Dict[str, any]
+    metadata: Dict[str, Any]
 
 
 # BOM Schemas
