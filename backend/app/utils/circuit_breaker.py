@@ -34,8 +34,7 @@ class LoggingListener(CircuitBreakerListener):
 
 database_breaker = CircuitBreaker(
     fail_max=settings.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
-    timeout_duration=settings.CIRCUIT_BREAKER_TIMEOUT,
-    expected_exception=Exception,
+    reset_timeout=settings.CIRCUIT_BREAKER_TIMEOUT,
     name="database",
     listeners=[LoggingListener()]
 ) if settings.CIRCUIT_BREAKER_ENABLED else None
@@ -43,8 +42,7 @@ database_breaker = CircuitBreaker(
 
 thermal_calculation_breaker = CircuitBreaker(
     fail_max=settings.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
-    timeout_duration=settings.CIRCUIT_BREAKER_TIMEOUT,
-    expected_exception=Exception,
+    reset_timeout=settings.CIRCUIT_BREAKER_TIMEOUT,
     name="thermal_calculation",
     listeners=[LoggingListener()]
 ) if settings.CIRCUIT_BREAKER_ENABLED else None
@@ -52,8 +50,7 @@ thermal_calculation_breaker = CircuitBreaker(
 
 external_api_breaker = CircuitBreaker(
     fail_max=settings.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
-    timeout_duration=settings.CIRCUIT_BREAKER_TIMEOUT,
-    expected_exception=Exception,
+    reset_timeout=settings.CIRCUIT_BREAKER_TIMEOUT,
     name="external_api",
     listeners=[LoggingListener()]
 ) if settings.CIRCUIT_BREAKER_ENABLED else None
@@ -75,8 +72,8 @@ def get_circuit_breaker_status(breaker: CircuitBreaker) -> dict:
         "state": breaker.current_state.name,
         "failure_count": breaker.fail_counter,
         "failure_threshold": breaker.fail_max,
-        "timeout_duration": breaker.timeout_duration,
-        "last_failure_time": str(breaker.last_failure_time) if breaker.last_failure_time else None
+        "reset_timeout": breaker._reset_timeout,
+        "last_failure_time": str(breaker._last_failure) if hasattr(breaker, '_last_failure') and breaker._last_failure else None
     }
 
 

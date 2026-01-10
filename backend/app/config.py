@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "HomeRack API"
-    VERSION: str = "1.0.0"
+    VERSION: str = "1.0.1"
     DEBUG: bool = False
     ENVIRONMENT: str = Field(default="development", description="Environment: development, staging, production")
 

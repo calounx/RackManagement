@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', Consolas, monospace;
+  
+  --color-background: rgb(10 22 26);
+  --color-foreground: rgb(248 250 252);
+  
+  --color-electric: rgb(0 212 255);
+  --color-amber: rgb(255 176 32);
+  --color-lime: rgb(163 255 18);
+  
+  --color-card: rgb(15 27 35);
+  --color-border: rgb(30 42 56);
+  --color-muted: rgb(148 163 184);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Custom utility classes */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(189, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.glass {
+  background: rgba(15, 27, 35, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(189, 255, 255, 0.1);
+}
+
+.neon-text {
+  text-shadow:
+    0 0 10px rgba(0, 212, 255, 0.8),
+    0 0 20px rgba(0, 212, 255, 0.5),
+    0 0 30px rgba(0, 212, 255, 0.3);
+}
+
+.glow-electric {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+.glow-lime {
+  box-shadow: 0 0 20px rgba(163, 255, 18, 0.3);
+}
+
+.glow-amber {
+  box-shadow: 0 0 20px rgba(255, 176, 32, 0.3);
+}

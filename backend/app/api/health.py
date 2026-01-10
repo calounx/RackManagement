@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/health", tags=["Health"])
+async def basic_health_check():
+    """
+    Basic health check - returns simple status.
+    Use this for basic uptime monitoring and frontend health checks.
+    """
+    return {
+        "status": "healthy",
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT
+    }
+
+
 @router.get("/health/ready", tags=["Health"])
 async def readiness_check(db: Session = Depends(get_db)):
     """
