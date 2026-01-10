@@ -1,6 +1,14 @@
-# HomeRack - Network Rack Optimization System
+# RackManagement - Network Rack Optimization System
 
-A comprehensive web application for optimizing network device placement in server racks, featuring automatic device specification fetching, cable management optimization, and bill of materials generation.
+[![GitHub](https://img.shields.io/badge/github-calounx%2FRackManagement-blue?logo=github)](https://github.com/calounx/RackManagement)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.128.0-green.svg)](https://fastapi.tiangolo.com/)
+[![Status](https://img.shields.io/badge/status-active-success.svg)]()
+
+A comprehensive web application for optimizing network device placement in server racks, featuring automatic device specification fetching, intelligent placement optimization, and cable bill of materials generation.
+
+**🌐 Live Demo**: [API Docs](http://lampadas.local:8000/docs) (if accessible on your network)
 
 ## Features
 
@@ -36,10 +44,10 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r requirements-simple.txt
 
 # Initialize database
-python -c "from app.database import Base, engine; Base.metadata.create_all(bind=engine)"
+python init_db.py
 
 # Run development server
 uvicorn app.main:app --reload
@@ -127,12 +135,36 @@ Current implementation phase: **Phase 1 - Backend Foundation**
 - [ ] Optimization engine
 - [ ] Frontend UI
 
-See [implementation plan](/home/calounx/.claude/plans/clever-tickling-spark.md) for complete roadmap.
+See [implementation plan](https://github.com/calounx/RackManagement/blob/main/DEPLOYMENT.md) for complete roadmap.
+
+## Documentation
+
+- [Setup Guide](SETUP.md) - Development environment setup
+- [Deployment Guide](DEPLOYMENT.md) - Production deployment
+- [API Test Report](API_TEST_REPORT.md) - Test results and metrics
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute
+
+## Repository
+
+- **GitHub**: [https://github.com/calounx/RackManagement](https://github.com/calounx/RackManagement)
+- **Issues**: [https://github.com/calounx/RackManagement/issues](https://github.com/calounx/RackManagement/issues)
+- **Author**: [calounx](https://github.com/calounx)
 
 ## License
 
-MIT License
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## Contributing
 
-Contributions welcome! Please read the contributing guidelines first.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting PRs.
+
+### Quick Contribution Steps
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+**Built with ❤️ using FastAPI, React, and Claude AI**
