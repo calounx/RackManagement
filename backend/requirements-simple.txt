@@ -1,0 +1,29 @@
+# Latest stable versions compatible with Python 3.13
+# FastAPI and web framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Database
+sqlalchemy
+alembic
+
+# Redis caching
+redis
+
+# Data validation (use latest for Python 3.13 compatibility)
+pydantic>=2.10
+pydantic-settings
+
+# HTTP client
+httpx
+
+# HTML parsing
+beautifulsoup4
+html5lib
+
+# Rate limiting
+aiolimiter
+
+# Utilities
+python-dateutil
