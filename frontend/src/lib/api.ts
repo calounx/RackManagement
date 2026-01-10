@@ -118,7 +118,7 @@ class API {
   }
 
   async getRack(id: number): Promise<Rack> {
-    const response = await this.client.get(`/racks/${id}/`);
+    const response = await this.client.get(`/racks/${id}`);
     return response.data;
   }
 
@@ -128,16 +128,16 @@ class API {
   }
 
   async updateRack(id: number, data: Partial<RackCreate>): Promise<Rack> {
-    const response = await this.client.put(`/racks/${id}/`, data);
+    const response = await this.client.put(`/racks/${id}`, data);
     return response.data;
   }
 
   async deleteRack(id: number): Promise<void> {
-    await this.client.delete(`/racks/${id}/`);
+    await this.client.delete(`/racks/${id}`);
   }
 
   async getRackThermal(id: number): Promise<ThermalData> {
-    const response = await this.client.get(`/racks/${id}/thermal/`);
+    const response = await this.client.get(`/racks/${id}/thermal`);
     return response.data;
   }
 
@@ -150,7 +150,7 @@ class API {
   }
 
   async getDevice(id: number): Promise<Device> {
-    const response = await this.client.get(`/devices/${id}/`);
+    const response = await this.client.get(`/devices/${id}`);
     return response.data;
   }
 
@@ -160,16 +160,16 @@ class API {
   }
 
   async updateDevice(id: number, data: Partial<DeviceCreate>): Promise<Device> {
-    const response = await this.client.put(`/devices/${id}/`, data);
+    const response = await this.client.put(`/devices/${id}`, data);
     return response.data;
   }
 
   async deleteDevice(id: number): Promise<void> {
-    await this.client.delete(`/devices/${id}/`);
+    await this.client.delete(`/devices/${id}`);
   }
 
   async moveDevice(id: number, rackId: number, startUnit: number): Promise<Device> {
-    const response = await this.client.post(`/devices/${id}/move/`, {
+    const response = await this.client.post(`/devices/${id}/move`, {
       rack_id: rackId,
       start_unit: startUnit,
     });
@@ -191,7 +191,7 @@ class API {
   }
 
   async getDeviceSpec(id: number): Promise<DeviceSpec> {
-    const response = await this.client.get(`/device-specs/${id}/`);
+    const response = await this.client.get(`/device-specs/${id}`);
     return response.data;
   }
 
@@ -201,12 +201,12 @@ class API {
   }
 
   async updateDeviceSpec(id: number, data: Partial<DeviceSpec>): Promise<DeviceSpec> {
-    const response = await this.client.put(`/device-specs/${id}/`, data);
+    const response = await this.client.put(`/device-specs/${id}`, data);
     return response.data;
   }
 
   async deleteDeviceSpec(id: number): Promise<void> {
-    await this.client.delete(`/device-specs/${id}/`);
+    await this.client.delete(`/device-specs/${id}`);
   }
 
   async fetchSpecsFromUrl(url: string): Promise<DeviceSpec> {
@@ -223,7 +223,7 @@ class API {
   }
 
   async getConnection(id: number): Promise<Connection> {
-    const response = await this.client.get(`/connections/${id}/`);
+    const response = await this.client.get(`/connections/${id}`);
     return response.data;
   }
 
@@ -233,12 +233,12 @@ class API {
   }
 
   async updateConnection(id: number, data: Partial<ConnectionCreate>): Promise<Connection> {
-    const response = await this.client.put(`/connections/${id}/`, data);
+    const response = await this.client.put(`/connections/${id}`, data);
     return response.data;
   }
 
   async deleteConnection(id: number): Promise<void> {
-    await this.client.delete(`/connections/${id}/`);
+    await this.client.delete(`/connections/${id}`);
   }
 
   async validateConnection(data: ConnectionCreate): Promise<{
@@ -246,7 +246,7 @@ class API {
     warnings: string[];
     errors: string[];
   }> {
-    const response = await this.client.post('/connections/validate/', data);
+    const response = await this.client.post('/connections/validate', data);
     return response.data;
   }
 
@@ -271,21 +271,21 @@ class API {
     utilization_percentage: number;
     devices_count: number;
   }> {
-    const response = await this.client.get(`/racks/${id}/utilization/`);
+    const response = await this.client.get(`/racks/${id}/utilization`);
     return response.data;
   }
 
   // ==================== Search ====================
 
   async searchDevices(query: string): Promise<Device[]> {
-    const response = await this.client.get('/devices/search/', {
+    const response = await this.client.get('/devices/search', {
       params: { q: query },
     });
     return response.data;
   }
 
   async searchDeviceSpecs(query: string): Promise<DeviceSpec[]> {
-    const response = await this.client.get('/device-specs/search/', {
+    const response = await this.client.get('/device-specs/search', {
       params: { q: query },
     });
     return response.data;
