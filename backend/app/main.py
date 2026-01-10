@@ -2,22 +2,40 @@
 HomeRack - Network Rack Optimization System
 Main FastAPI application
 """
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import device_specs, devices, racks, connections
+from .api import device_specs, devices, racks, connections, health
+from .config import settings
+from .middleware.error_handlers import register_exception_handlers
+from .middleware.request_id import RequestIDMiddleware
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="HomeRack API",
+    title=settings.APP_NAME,
     description="Network device rack optimization and cable management system",
-    version="1.0.0"
+    version=settings.VERSION,
+    debug=settings.DEBUG
 )
+
+# Register exception handlers for consistent error responses
+register_exception_handlers(app)
+
+# Add request ID middleware for tracing
+app.add_middleware(RequestIDMiddleware)
 
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # React dev servers
-    allow_credentials=True,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,6 +61,10 @@ app.include_router(
     prefix="/api/connections",
     tags=["Connections"]
 )
+app.include_router(
+    health.router,
+    prefix="/api"
+)
 
 @app.get("/")
 async def root():
@@ -61,7 +83,30 @@ async def root():
         }
     }
 
+@app.on_event("startup")
+async def startup_event():
+    """Application startup event handler."""
+    logger.info(f"Starting {settings.APP_NAME} v{settings.VERSION}")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"Debug mode: {settings.DEBUG}")
+    logger.info(f"Circuit breaker enabled: {settings.CIRCUIT_BREAKER_ENABLED}")
+    logger.info(f"Rate limiting enabled: {settings.RATE_LIMIT_ENABLED}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Application shutdown event handler."""
+    logger.info(f"Shutting down {settings.APP_NAME}")
+
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """
+    Basic health check endpoint (liveness probe).
+    Returns 200 if application is running.
+    """
+    return {
+        "status": "healthy",
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT
+    }
