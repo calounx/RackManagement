@@ -27,9 +27,17 @@ pytesseract==0.3.10
 
 # Rate limiting
 aiolimiter==1.1.0
+slowapi==0.1.9
 
 # Optimization
 python-constraint==1.4.0
+
+# Retry and circuit breaker
+tenacity==8.2.3
+pybreaker==1.0.1
+
+# Structured logging
+structlog==24.1.0
 
 # Utilities
 python-dateutil==2.8.2
