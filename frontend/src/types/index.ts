@@ -5,8 +5,15 @@ export interface Rack {
   name: string;
   location: string;
   units: number;
+  width_inches?: number;
+  depth_mm?: number;
   max_power_watts: number;
   max_weight_kg: number;
+  cooling_type?: string;
+  cooling_capacity_btu?: number;
+  ambient_temp_c?: number;
+  max_inlet_temp_c?: number;
+  airflow_cfm?: number;
   created_at: string;
   updated_at: string;
   devices?: Device[];
@@ -16,8 +23,15 @@ export interface RackCreate {
   name: string;
   location: string;
   units?: number;
+  width_inches?: number;
+  depth_mm?: number;
   max_power_watts?: number;
   max_weight_kg?: number;
+  cooling_type?: string;
+  cooling_capacity_btu?: number;
+  ambient_temp_c?: number;
+  max_inlet_temp_c?: number;
+  airflow_cfm?: number;
 }
 
 export interface Device {

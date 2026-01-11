@@ -54,12 +54,12 @@ interface AppState {
   createDevice: (data: any) => Promise<Device | null>;
   updateDevice: (id: number, data: any) => Promise<void>;
   deleteDevice: (id: number) => Promise<void>;
-  moveDevice: (id: number, rackId: number, startUnit: number) => Promise<void>;
+  moveDevice: (id: number, rackId: number | null, startUnit: number | null) => Promise<void>;
   selectDevice: (id: number | null) => void;
 
   // Actions - Device Specs
   createDeviceSpec: (data: any) => Promise<DeviceSpec | null>;
-  fetchSpecsFromUrl: (url: string) => Promise<DeviceSpec | null>;
+  fetchSpecsFromUrl: (brand: string, model: string) => Promise<DeviceSpec | null>;
 
   // Actions - Connections
   createConnection: (data: any) => Promise<Connection | null>;
@@ -357,9 +357,12 @@ export const useStore = create<AppState>()(
               devices: state.devices.map((d) => (d.id === id ? updated : d)),
               loading: false,
             }));
+            const message = rackId === null
+              ? 'Device removed from rack'
+              : `Device moved to rack unit ${startUnit}`;
             get().addToast({
-              title: 'Device moved',
-              description: `Device moved to rack unit ${startUnit}`,
+              title: rackId === null ? 'Device removed' : 'Device moved',
+              description: message,
               type: 'success',
             });
           } catch (error) {
@@ -402,10 +405,10 @@ export const useStore = create<AppState>()(
           }
         },
 
-        fetchSpecsFromUrl: async (url) => {
+        fetchSpecsFromUrl: async (brand, model) => {
           set({ loading: true, error: null });
           try {
-            const spec = await api.fetchSpecsFromUrl(url);
+            const spec = await api.fetchSpecsFromUrl(brand, model);
             set((state) => ({
               deviceSpecs: [...state.deviceSpecs, spec],
               loading: false,
