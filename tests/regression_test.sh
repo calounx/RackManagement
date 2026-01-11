@@ -93,7 +93,7 @@ test_json "Get rack #1 ID" "$BASE_URL/api/racks/1" '.id' "id"
 test_json "Get rack #1 layout" "$BASE_URL/api/racks/1/layout" '.rack.id' "rack_id"
 test_json "Get rack layout positions" "$BASE_URL/api/racks/1/layout" '.positions | length' "positions_count"
 test_json "Get rack thermal analysis" "$BASE_URL/api/racks/1/thermal-analysis" '.rack_id' "rack_id"
-test_json "Get rack thermal total power" "$BASE_URL/api/racks/1/thermal-analysis" '.total_power_watts' "total_power"
+test_json "Get rack thermal total power" "$BASE_URL/api/racks/1/thermal-analysis" '.heat_distribution.total_power_watts' "total_power"
 echo ""
 
 echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
