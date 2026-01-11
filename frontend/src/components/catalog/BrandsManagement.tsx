@@ -8,7 +8,7 @@ import { BrandFetchDialog } from './BrandFetchDialog';
 import type { BrandResponse } from '../../types/catalog';
 import { useCatalogStore } from '../../store/useCatalogStore';
 import { getCatalogErrorMessage } from '../../lib/api-catalog';
-import { cn } from '../../lib/utils';
+// import { cn } from '../../lib/utils'; // Removed unused import
 import { useStore } from '../../store/useStore';
 import {
   SearchFilterBar,

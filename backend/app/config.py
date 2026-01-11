@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default="change-me-in-production", description="Secret key for signing")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, description="Access token expiration (minutes)")
 
+    # File Upload Configuration
+    UPLOAD_DIR: str = Field(default="uploads", description="Base directory for file uploads")
+    BRAND_LOGOS_DIR: str = Field(default="uploads/brand_logos", description="Directory for brand logos")
+    MAX_LOGO_SIZE_MB: int = Field(default=5, description="Maximum logo file size in MB")
+    ALLOWED_LOGO_FORMATS: list[str] = Field(
+        default=[".png", ".jpg", ".jpeg", ".svg", ".webp"],
+        description="Allowed logo file formats"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -4,9 +4,12 @@ Handles CRUD operations for device manufacturers and brands.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
+from pathlib import Path
+from uuid import uuid4
+import os
 
 from ..models import Brand, Model, DeviceType
 from ..schemas import (
@@ -15,9 +18,17 @@ from ..schemas import (
     BrandResponse,
     ModelResponse,
     BrandSummary,
-    DeviceTypeSummary
+    DeviceTypeSummary,
+    BrandFetchRequest,
+    BrandInfoResponse
 )
 from .dependencies import get_db, pagination_params
+from ..config import settings
+from ..fetchers.wikipedia import WikipediaFetcher
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -393,28 +404,240 @@ async def delete_brand(
         )
 
 
-@router.post("/fetch", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def fetch_brand_from_web(
-    brand_name: str = Query(..., description="Brand name to fetch information for")
+@router.post("/{brand_id}/logo", response_model=BrandResponse)
+async def upload_brand_logo(
+    brand_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
 ):
     """
-    Fetch brand information from web sources (Wikipedia, official website, etc.).
+    Upload a brand logo image.
 
-    TODO: Implement in Phase 3 - Web fetching for brand information.
+    - **brand_id**: Brand ID to upload logo for
+    - **file**: Image file to upload (.png, .jpg, .jpeg, .svg, .webp)
 
-    This endpoint will:
-    - Search for brand information on Wikipedia and other sources
-    - Extract company details (founded year, headquarters, website, etc.)
-    - Create or update brand entry with fetched data
-    - Return confidence level for the fetched information
-
-    Currently returns 501 Not Implemented.
+    File size limit: 5MB
+    Returns updated brand with new logo_url.
     """
-    return {
-        "message": "Brand web fetching not yet implemented. Coming in Phase 3.",
-        "requested_brand": brand_name,
-        "status": "not_implemented"
-    }
+    # Check if brand exists
+    db_brand = db.query(Brand).filter(Brand.id == brand_id).first()
+    if not db_brand:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Brand with ID {brand_id} not found"
+        )
+
+    # Validate file extension
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in settings.ALLOWED_LOGO_FORMATS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file format. Allowed formats: {', '.join(settings.ALLOWED_LOGO_FORMATS)}"
+        )
+
+    # Read file content and validate size
+    file_content = await file.read()
+    file_size_mb = len(file_content) / (1024 * 1024)
+    if file_size_mb > settings.MAX_LOGO_SIZE_MB:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File size exceeds maximum allowed size of {settings.MAX_LOGO_SIZE_MB}MB"
+        )
+
+    try:
+        # Ensure upload directory exists
+        upload_dir = Path(settings.BRAND_LOGOS_DIR)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        # Delete old logo file if exists
+        if db_brand.logo_url and db_brand.logo_url.startswith("/uploads/brand_logos/"):
+            old_filename = db_brand.logo_url.split("/")[-1]
+            old_file_path = upload_dir / old_filename
+            if old_file_path.exists():
+                old_file_path.unlink()
+
+        # Generate unique filename: slug_uuid.ext
+        unique_filename = f"{db_brand.slug}_{uuid4().hex[:8]}{file_ext}"
+        file_path = upload_dir / unique_filename
+
+        # Save file
+        with open(file_path, "wb") as f:
+            f.write(file_content)
+
+        # Update brand logo_url
+        db_brand.logo_url = f"/uploads/brand_logos/{unique_filename}"
+        db.commit()
+        db.refresh(db_brand)
+
+        # Get model count
+        model_count = db.query(func.count(Model.id)).filter(Model.brand_id == brand_id).scalar()
+
+        # Build response
+        response = {
+            "id": db_brand.id,
+            "name": db_brand.name,
+            "slug": db_brand.slug,
+            "website": db_brand.website,
+            "support_url": db_brand.support_url,
+            "logo_url": db_brand.logo_url,
+            "description": db_brand.description,
+            "founded_year": db_brand.founded_year,
+            "headquarters": db_brand.headquarters,
+            "last_fetched_at": db_brand.last_fetched_at,
+            "fetch_confidence": db_brand.fetch_confidence,
+            "fetch_source": db_brand.fetch_source,
+            "created_at": db_brand.created_at,
+            "updated_at": db_brand.updated_at,
+            "model_count": model_count
+        }
+
+        return response
+
+    except Exception as e:
+        db.rollback()
+        # Clean up file if it was created
+        if 'file_path' in locals() and file_path.exists():
+            file_path.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload logo: {str(e)}"
+        )
+
+
+@router.delete("/{brand_id}/logo", response_model=BrandResponse)
+async def delete_brand_logo(
+    brand_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a brand's logo.
+
+    - **brand_id**: Brand ID to remove logo from
+
+    Deletes the logo file and clears the logo_url field.
+    """
+    db_brand = db.query(Brand).filter(Brand.id == brand_id).first()
+    if not db_brand:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Brand with ID {brand_id} not found"
+        )
+
+    try:
+        # Delete logo file if exists
+        if db_brand.logo_url and db_brand.logo_url.startswith("/uploads/brand_logos/"):
+            filename = db_brand.logo_url.split("/")[-1]
+            file_path = Path(settings.BRAND_LOGOS_DIR) / filename
+            if file_path.exists():
+                file_path.unlink()
+
+        # Clear logo_url
+        db_brand.logo_url = None
+        db.commit()
+        db.refresh(db_brand)
+
+        # Get model count
+        model_count = db.query(func.count(Model.id)).filter(Model.brand_id == brand_id).scalar()
+
+        # Build response
+        response = {
+            "id": db_brand.id,
+            "name": db_brand.name,
+            "slug": db_brand.slug,
+            "website": db_brand.website,
+            "support_url": db_brand.support_url,
+            "logo_url": db_brand.logo_url,
+            "description": db_brand.description,
+            "founded_year": db_brand.founded_year,
+            "headquarters": db_brand.headquarters,
+            "last_fetched_at": db_brand.last_fetched_at,
+            "fetch_confidence": db_brand.fetch_confidence,
+            "fetch_source": db_brand.fetch_source,
+            "created_at": db_brand.created_at,
+            "updated_at": db_brand.updated_at,
+            "model_count": model_count
+        }
+
+        return response
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete logo: {str(e)}"
+        )
+
+
+@router.post("/fetch", response_model=BrandInfoResponse, status_code=status.HTTP_200_OK)
+async def fetch_brand_from_web(
+    request: BrandFetchRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch brand information from Wikipedia and other web sources.
+
+    This endpoint:
+    - Searches for brand information on Wikipedia
+    - Extracts company details (founded year, headquarters, website, etc.)
+    - Checks if brand already exists in database
+    - Returns fetched information for preview (does NOT create the brand)
+    - User can edit and confirm before saving via regular create endpoint
+
+    **Phase 3 Implementation - Web Fetching**
+    """
+    brand_name = request.brand_name.strip()
+
+    # Step 1: Check if brand already exists
+    existing_brand = db.query(Brand).filter(
+        func.lower(Brand.name) == brand_name.lower()
+    ).first()
+
+    if existing_brand:
+        logger.info(f"Brand '{brand_name}' already exists in database")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Brand '{existing_brand.name}' already exists in the database"
+        )
+
+    # Step 2: Fetch from Wikipedia
+    logger.info(f"Fetching brand information for '{brand_name}' from Wikipedia")
+    fetcher = WikipediaFetcher()
+
+    try:
+        brand_info = await fetcher.fetch_brand_info(brand_name)
+
+        if not brand_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Brand '{brand_name}' not found on Wikipedia. Please add the brand manually or try a different name."
+            )
+
+        # Return fetched info for preview (not saved to database yet)
+        brand_data = brand_info.to_dict()
+        logger.info(f"Successfully fetched Wikipedia data for: {brand_name}")
+
+        return BrandInfoResponse(
+            name=brand_data["name"],
+            slug=brand_data["slug"],
+            website=brand_data.get("website"),
+            description=brand_data.get("description"),
+            founded_year=brand_data.get("founded_year"),
+            headquarters=brand_data.get("headquarters"),
+            logo_url=brand_data.get("logo_url"),
+            fetch_confidence=brand_data.get("fetch_confidence"),
+            fetch_source=brand_data.get("fetch_source", "wikipedia")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching brand from Wikipedia: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch brand information: {str(e)}"
+        )
+    finally:
+        await fetcher.close()
 
 
 @router.post("/validate", status_code=status.HTTP_501_NOT_IMPLEMENTED)

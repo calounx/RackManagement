@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 
-from ..models import Device, DeviceSpecification, RackPosition, Connection
+from ..models import Device, DeviceSpecification, RackPosition, Connection, Model
 from ..schemas import (
     DeviceCreate,
     DeviceUpdate,
     DeviceResponse,
     DeviceQuickAdd,
+    DeviceFromModel,
     AccessFrequency
 )
 from .dependencies import get_db, pagination_params
@@ -78,32 +79,60 @@ async def create_device(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new device from an existing device specification.
+    Create a new device from an existing device specification or catalog model.
 
-    - **specification_id**: ID of the device specification to use (required)
+    - **specification_id**: ID of the device specification to use (legacy, optional)
+    - **model_id**: ID of the catalog model to use (new, optional)
     - **custom_name**: Optional custom name for this device instance
     - **serial_number**: Optional serial number
     - **access_frequency**: How often the device is accessed (default: MEDIUM)
     - **notes**: Optional notes about the device
-    """
-    # Validate that specification exists
-    spec = db.query(DeviceSpecification).filter(
-        DeviceSpecification.id == device.specification_id
-    ).first()
 
-    if not spec:
+    Note: Either specification_id OR model_id must be provided.
+    """
+    # Validate that either specification_id or model_id is provided
+    if not device.specification_id and not device.model_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Device specification with ID {device.specification_id} not found"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either specification_id or model_id must be provided"
         )
+
+    if device.specification_id and device.model_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only one of specification_id or model_id should be provided, not both"
+        )
+
+    # Validate specification if provided
+    if device.specification_id:
+        spec = db.query(DeviceSpecification).filter(
+            DeviceSpecification.id == device.specification_id
+        ).first()
+        if not spec:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Device specification with ID {device.specification_id} not found"
+            )
+
+    # Validate model if provided
+    if device.model_id:
+        model = db.query(Model).filter(Model.id == device.model_id).first()
+        if not model:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Catalog model with ID {device.model_id} not found"
+            )
 
     db_device = Device(**device.model_dump())
     db.add(db_device)
     db.commit()
     db.refresh(db_device)
 
-    # Load specification relationship
-    db.refresh(db_device, ["specification"])
+    # Load relationships
+    if device.specification_id:
+        db.refresh(db_device, ["specification"])
+    if device.model_id:
+        db.refresh(db_device, ["catalog_model"])
 
     return db_device
 
@@ -216,6 +245,56 @@ async def bulk_create_devices(
         db.refresh(device, ["specification"])
 
     return devices
+
+
+@router.post("/from-model", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
+async def create_device_from_model(
+    device_data: DeviceFromModel,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new device from a catalog model with auto-populated specifications.
+
+    - **model_id**: ID of the catalog model to use (required)
+    - **custom_name**: Optional custom name for this device instance
+    - **serial_number**: Optional serial number
+    - **access_frequency**: How often the device is accessed (default: MEDIUM)
+    - **notes**: Optional notes about the device
+
+    This endpoint automatically populates device specifications from the catalog model,
+    providing a streamlined workflow for creating devices.
+    """
+    # Validate that model exists
+    model = db.query(Model).options(
+        joinedload(Model.brand),
+        joinedload(Model.device_type)
+    ).filter(Model.id == device_data.model_id).first()
+
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Catalog model with ID {device_data.model_id} not found"
+        )
+
+    # Create device with model_id
+    db_device = Device(
+        model_id=device_data.model_id,
+        custom_name=device_data.custom_name,
+        serial_number=device_data.serial_number,
+        access_frequency=device_data.access_frequency,
+        notes=device_data.notes,
+        # Populate denormalized fields from model for quick reference
+        brand=model.brand.name if model.brand else None,
+        model=model.name
+    )
+    db.add(db_device)
+    db.commit()
+    db.refresh(db_device)
+
+    # Load catalog_model relationship
+    db.refresh(db_device, ["catalog_model"])
+
+    return db_device
 
 
 @router.put("/{device_id}", response_model=DeviceResponse)

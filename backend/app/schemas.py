@@ -146,7 +146,9 @@ class DeviceBase(BaseModel):
 
 class DeviceCreate(DeviceBase):
     """Schema for creating device"""
-    specification_id: int = Field(..., gt=0)
+    specification_id: Optional[int] = Field(None, gt=0)
+    model_id: Optional[int] = Field(None, gt=0, description="ID of catalog model (alternative to specification_id)")
+    serial_number: Optional[str] = Field(None, max_length=200, description="Device serial number")
 
 
 class DeviceUpdate(BaseModel):
@@ -168,11 +170,23 @@ class DeviceQuickAdd(BaseModel):
 class DeviceResponse(DeviceBase):
     """Schema for device response"""
     id: int
-    specification_id: int
-    specification: DeviceSpecificationResponse
+    specification_id: Optional[int]
+    model_id: Optional[int]
+    specification: Optional[DeviceSpecificationResponse]
+    catalog_model: Optional['ModelResponse'] = Field(None, description="Catalog model details if model_id is set")
+    serial_number: Optional[str]
 
     class Config:
         from_attributes = True
+
+
+class DeviceFromModel(BaseModel):
+    """Schema for creating device from catalog model"""
+    model_id: int = Field(..., gt=0, description="Catalog model ID")
+    custom_name: Optional[str] = Field(None, min_length=1, max_length=200, description="Custom device name")
+    serial_number: Optional[str] = Field(None, max_length=200, description="Device serial number")
+    access_frequency: AccessFrequency = AccessFrequency.MEDIUM
+    notes: Optional[str] = None
 
 
 # Rack Schemas
@@ -707,3 +721,51 @@ class DCIMConnectionTestResult(BaseModel):
     message: str = Field(..., description="Test result message")
     response_time_ms: Optional[float] = Field(None, description="API response time in milliseconds")
     system_info: Optional[Dict[str, Any]] = Field(None, description="System information from DCIM")
+
+
+# ============================================================================
+# Web Fetch Schemas - Phase 3
+# ============================================================================
+
+class BrandFetchRequest(BaseModel):
+    """Request to fetch brand information from web sources"""
+    brand_name: str = Field(..., min_length=1, max_length=200, description="Brand name to fetch")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "brand_name": "Cisco Systems"
+            }
+        }
+
+
+class BrandInfoResponse(BaseModel):
+    """Brand information fetched from web sources (before saving to database)"""
+    name: str = Field(..., description="Brand name")
+    slug: str = Field(..., description="URL-friendly identifier")
+    website: Optional[str] = Field(None, description="Official website URL")
+    description: Optional[str] = Field(None, description="Brand description")
+    founded_year: Optional[int] = Field(None, description="Year founded")
+    headquarters: Optional[str] = Field(None, description="Headquarters location")
+    logo_url: Optional[str] = Field(None, description="Logo image URL")
+    fetch_confidence: FetchConfidence = Field(..., description="Confidence in fetched data")
+    fetch_source: str = Field(..., description="Source of fetched data")
+
+    class Config:
+        from_attributes = True
+
+
+class ModelFetchRequest(BaseModel):
+    """Request to fetch model specifications from manufacturer websites"""
+    brand: str = Field(..., min_length=1, max_length=200, description="Brand name")
+    model: str = Field(..., min_length=1, max_length=200, description="Model name")
+    device_type_id: Optional[int] = Field(None, gt=0, description="Device type ID (optional - will be inferred if not provided)")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "brand": "Cisco",
+                "model": "Catalyst 9300",
+                "device_type_id": 2
+            }
+        }

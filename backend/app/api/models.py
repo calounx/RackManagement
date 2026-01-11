@@ -4,6 +4,9 @@ Handles CRUD operations for device model specifications from catalog.
 """
 
 from typing import List, Optional
+from datetime import datetime
+import re
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
@@ -13,10 +16,13 @@ from ..schemas import (
     ModelCreate,
     ModelUpdate,
     ModelResponse,
+    ModelFetchRequest,
     BrandSummary,
     DeviceTypeSummary
 )
 from .dependencies import get_db, pagination_params
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -523,32 +529,349 @@ async def delete_model(
         )
 
 
-@router.post("/fetch", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+def slugify(text: str) -> str:
+    """
+    Convert text to URL-friendly slug format.
+
+    Args:
+        text: Input text to slugify
+
+    Returns:
+        Slugified text (lowercase, alphanumeric + hyphens)
+    """
+    if not text:
+        return ""
+
+    # Convert to lowercase
+    text = text.lower()
+
+    # Replace spaces and underscores with hyphens
+    text = re.sub(r'[\s_]+', '-', text)
+
+    # Remove non-alphanumeric characters except hyphens
+    text = re.sub(r'[^a-z0-9-]', '', text)
+
+    # Remove multiple consecutive hyphens
+    text = re.sub(r'-+', '-', text)
+
+    # Strip hyphens from start and end
+    text = text.strip('-')
+
+    return text
+
+
+def infer_device_type(brand: str, model: str, db: Session) -> int:
+    """
+    Infer device type ID from brand and model name.
+
+    Args:
+        brand: Device brand name
+        model: Device model name
+        db: Database session
+
+    Returns:
+        Device type ID
+    """
+    # Cache device types to avoid repeated queries
+    if not hasattr(infer_device_type, '_cache'):
+        infer_device_type._cache = {}
+        for dt in db.query(DeviceType).all():
+            infer_device_type._cache[dt.slug] = dt.id
+
+    cache = infer_device_type._cache
+    combined = f"{brand} {model}".lower()
+
+    # Check for keywords and product lines in order of specificity
+    # Format: (keyword/pattern, device_type_slug)
+    patterns = [
+        # Switches - specific product lines first
+        ('catalyst', 'switch'),      # Cisco Catalyst
+        ('nexus', 'switch'),         # Cisco Nexus
+        ('powerconnect', 'switch'),  # Dell PowerConnect
+        ('aruba', 'switch'),         # HPE Aruba
+        ('procurve', 'switch'),      # HP ProCurve
+        ('switch', 'switch'),        # Generic
+
+        # Routers
+        ('asr', 'router'),           # Cisco ASR
+        ('isr', 'router'),           # Cisco ISR
+        ('router', 'router'),        # Generic
+
+        # Firewalls
+        ('fortigate', 'firewall'),   # Fortinet FortiGate
+        ('palo alto', 'firewall'),   # Palo Alto
+        ('asa', 'firewall'),         # Cisco ASA
+        ('firewall', 'firewall'),    # Generic
+        ('firepower', 'firewall'),   # Cisco Firepower
+
+        # Servers
+        ('poweredge', 'server'),     # Dell PowerEdge
+        ('proliant', 'server'),      # HPE ProLiant
+        ('primergy', 'server'),      # Fujitsu Primergy
+        ('thinkserver', 'server'),   # Lenovo ThinkServer
+        ('server', 'server'),        # Generic
+
+        # Storage
+        ('powerstore', 'storage'),   # Dell PowerStore
+        ('powervault', 'storage'),   # Dell PowerVault
+        ('nimble', 'storage'),       # HPE Nimble
+        ('compellent', 'storage'),   # Dell Compellent
+        ('storage', 'storage'),      # Generic
+        ('san', 'storage'),          # Storage Area Network
+        ('nas', 'storage'),          # Network Attached Storage
+
+        # PDUs
+        ('pdu', 'pdu'),
+        ('power distribution', 'pdu'),
+        ('rack pdu', 'pdu'),
+
+        # UPS
+        ('ups', 'ups'),
+        ('uninterruptible', 'ups'),
+        ('smart-ups', 'ups'),        # APC Smart-UPS
+
+        # Patch Panels
+        ('patch panel', 'patch_panel'),
+        ('patch', 'patch_panel'),
+    ]
+
+    for pattern, slug in patterns:
+        if pattern in combined:
+            return cache.get(slug, cache['other'])
+
+    # Default to 'other'
+    return cache['other']
+
+
+@router.post("/fetch", response_model=ModelResponse)
 async def fetch_model_specs(
-    brand_name: str = Query(..., description="Brand name"),
-    model_name: str = Query(..., description="Model name")
+    request: ModelFetchRequest,
+    db: Session = Depends(get_db)
 ):
     """
     Fetch model specifications from manufacturer websites or datasheets.
 
-    TODO: Implement in Phase 5 - Automatic spec fetching for models.
+    This endpoint:
+    - Gets or creates the brand if it doesn't exist
+    - Checks if the model already exists and returns it if found
+    - Uses the SpecFetcherFactory to get the appropriate manufacturer fetcher
+    - Fetches specifications using existing fetcher infrastructure
+    - Infers device type if not provided
+    - Creates a Model record with all fetched specifications
+    - Returns ModelResponse with full relationships
 
-    This endpoint will:
-    - Search manufacturer website for model specifications
-    - Parse PDF datasheets and HTML specification pages
-    - Extract physical dimensions, power specs, and connectivity info
-    - Create or update model entry with fetched data
-    - Assign confidence level based on data source quality
-    - Return the model with fetched specifications
+    **Request Body:**
+    - brand: Brand name (e.g., "Cisco", "Dell")
+    - model: Model name (e.g., "Catalyst 9300", "PowerEdge R740")
+    - device_type_id: Optional device type ID (will be inferred if not provided)
 
-    Currently returns 501 Not Implemented.
+    **Returns:**
+    - Full model information with brand and device type details
+
+    **Errors:**
+    - 404: Model specifications not found
+    - 400: Invalid request or validation error
+    - 500: Internal server error
     """
-    return {
-        "message": "Model spec fetching not yet implemented. Coming in Phase 5.",
-        "requested_brand": brand_name,
-        "requested_model": model_name,
-        "status": "not_implemented"
-    }
+    try:
+        # 1. Get or create brand
+        brand = db.query(Brand).filter(
+            func.lower(Brand.name) == request.brand.lower()
+        ).first()
+
+        if not brand:
+            logger.info(f"Brand '{request.brand}' not found, creating new brand")
+            brand = Brand(
+                name=request.brand.strip(),
+                slug=slugify(request.brand),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(brand)
+            db.flush()  # Get the ID without committing
+
+        # 2. Check if model already exists
+        existing = db.query(Model).filter(
+            Model.brand_id == brand.id,
+            func.lower(Model.name) == request.model.lower()
+        ).first()
+
+        if existing:
+            logger.info(f"Model '{request.model}' from '{request.brand}' already exists, returning existing")
+            # Load relationships
+            db.refresh(existing, ["brand", "device_type"])
+
+            # Get device count
+            device_count = len(existing.devices) if existing.devices else 0
+
+            # Build response
+            response = {
+                "id": existing.id,
+                "brand_id": existing.brand_id,
+                "device_type_id": existing.device_type_id,
+                "name": existing.name,
+                "variant": existing.variant,
+                "description": existing.description,
+                "release_date": existing.release_date,
+                "end_of_life": existing.end_of_life,
+                "height_u": existing.height_u,
+                "width_type": existing.width_type,
+                "depth_mm": existing.depth_mm,
+                "weight_kg": existing.weight_kg,
+                "power_watts": existing.power_watts,
+                "heat_output_btu": existing.heat_output_btu,
+                "airflow_pattern": existing.airflow_pattern,
+                "max_operating_temp_c": existing.max_operating_temp_c,
+                "typical_ports": existing.typical_ports,
+                "mounting_type": existing.mounting_type,
+                "datasheet_url": existing.datasheet_url,
+                "image_url": existing.image_url,
+                "source": existing.source,
+                "confidence": existing.confidence,
+                "fetched_at": existing.fetched_at,
+                "last_updated": existing.last_updated,
+                "device_count": device_count,
+                "brand": {
+                    "id": existing.brand.id,
+                    "name": existing.brand.name,
+                    "slug": existing.brand.slug,
+                    "logo_url": existing.brand.logo_url
+                },
+                "device_type": {
+                    "id": existing.device_type.id,
+                    "name": existing.device_type.name,
+                    "slug": existing.device_type.slug,
+                    "icon": existing.device_type.icon,
+                    "color": existing.device_type.color
+                }
+            }
+            return response
+
+        # 3. Fetch specs using existing fetcher infrastructure
+        logger.info(f"Fetching specs for '{request.brand} {request.model}' from manufacturer")
+
+        from ..fetchers.factory import get_default_factory
+
+        factory = get_default_factory()
+        fetcher = factory.get_fetcher(request.brand)
+
+        # Fetch with cache to avoid repeated requests
+        device_spec = await fetcher.fetch_with_cache(request.brand, request.model)
+
+        if not device_spec:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Model specifications not found for '{request.brand} {request.model}'. "
+                       f"The manufacturer website may not have this model or it may not be supported yet."
+            )
+
+        # 4. Infer device type if not provided
+        device_type_id = request.device_type_id
+        if not device_type_id:
+            device_type_id = infer_device_type(request.brand, request.model, db)
+            logger.info(f"Inferred device type ID: {device_type_id}")
+
+        # Validate device type exists
+        device_type = db.query(DeviceType).filter(DeviceType.id == device_type_id).first()
+        if not device_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Device type with ID {device_type_id} not found"
+            )
+
+        # 5. Create model with fetched specifications
+        logger.info(f"Creating model '{device_spec.model}' from fetched specs")
+
+        # Convert enum values to strings
+        width_type_str = device_spec.width_type.value if device_spec.width_type else None
+        airflow_str = device_spec.airflow_pattern.value if device_spec.airflow_pattern else None
+        confidence_str = device_spec.confidence.value if hasattr(device_spec.confidence, 'value') else str(device_spec.confidence)
+
+        model = Model(
+            brand_id=brand.id,
+            device_type_id=device_type_id,
+            name=device_spec.model,
+            variant=device_spec.variant,
+            height_u=device_spec.height_u,
+            width_type=width_type_str,
+            depth_mm=device_spec.depth_mm,
+            weight_kg=device_spec.weight_kg,
+            power_watts=device_spec.power_watts,
+            heat_output_btu=device_spec.heat_output_btu,
+            airflow_pattern=airflow_str,
+            max_operating_temp_c=device_spec.max_operating_temp_c,
+            typical_ports=device_spec.typical_ports,
+            mounting_type=device_spec.mounting_type,
+            datasheet_url=device_spec.source_url,
+            source="web_fetched",
+            confidence=confidence_str,
+            fetched_at=datetime.utcnow(),
+            last_updated=datetime.utcnow()
+        )
+
+        db.add(model)
+        db.commit()
+        db.refresh(model)
+
+        # Load relationships
+        db.refresh(model, ["brand", "device_type"])
+
+        logger.info(f"Successfully created model ID {model.id}")
+
+        # 6. Build response with full relationships
+        response = {
+            "id": model.id,
+            "brand_id": model.brand_id,
+            "device_type_id": model.device_type_id,
+            "name": model.name,
+            "variant": model.variant,
+            "description": model.description,
+            "release_date": model.release_date,
+            "end_of_life": model.end_of_life,
+            "height_u": model.height_u,
+            "width_type": model.width_type,
+            "depth_mm": model.depth_mm,
+            "weight_kg": model.weight_kg,
+            "power_watts": model.power_watts,
+            "heat_output_btu": model.heat_output_btu,
+            "airflow_pattern": model.airflow_pattern,
+            "max_operating_temp_c": model.max_operating_temp_c,
+            "typical_ports": model.typical_ports,
+            "mounting_type": model.mounting_type,
+            "datasheet_url": model.datasheet_url,
+            "image_url": model.image_url,
+            "source": model.source,
+            "confidence": model.confidence,
+            "fetched_at": model.fetched_at,
+            "last_updated": model.last_updated,
+            "device_count": 0,
+            "brand": {
+                "id": model.brand.id,
+                "name": model.brand.name,
+                "slug": model.brand.slug,
+                "logo_url": model.brand.logo_url
+            },
+            "device_type": {
+                "id": model.device_type.id,
+                "name": model.device_type.name,
+                "slug": model.device_type.slug,
+                "icon": model.device_type.icon,
+                "color": model.device_type.color
+            }
+        }
+
+        return response
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching model specs: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch model specifications: {str(e)}"
+        )
 
 
 @router.post("/import", status_code=status.HTTP_501_NOT_IMPLEMENTED)

@@ -265,6 +265,17 @@ class API {
     return this.transformDevice(response.data);
   }
 
+  async createDeviceFromModel(data: {
+    model_id: number;
+    custom_name?: string;
+    serial_number?: string;
+    access_frequency?: string;
+    notes?: string;
+  }): Promise<Device> {
+    const response = await this.client.post('/devices/from-model', data);
+    return this.transformDevice(response.data);
+  }
+
   async updateDevice(id: number, data: Partial<DeviceCreate>): Promise<Device> {
     const response = await this.client.put(`/devices/${id}`, data);
     return this.transformDevice(response.data);

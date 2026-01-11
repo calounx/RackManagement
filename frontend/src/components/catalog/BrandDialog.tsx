@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Upload, X, Image as ImageIcon } from 'lucide-react';
 import type { BrandResponse, BrandCreate, BrandUpdate } from '../../types/catalog';
 import { useCatalogStore } from '../../store/useCatalogStore';
 import { getCatalogErrorMessage } from '../../lib/api-catalog';
@@ -41,8 +41,9 @@ export const BrandDialog: React.FC<BrandDialogProps> = ({
   brand,
   onSuccess,
 }) => {
-  const { createBrand, updateBrand, brandsLoading } = useCatalogStore();
+  const { createBrand, updateBrand, uploadBrandLogo, deleteBrandLogo, brandsLoading } = useCatalogStore();
   const isEditMode = !!brand;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -56,6 +57,9 @@ export const BrandDialog: React.FC<BrandDialogProps> = ({
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Initialize form data when brand changes
   useEffect(() => {
@@ -83,7 +87,83 @@ export const BrandDialog: React.FC<BrandDialogProps> = ({
       });
     }
     setErrors({});
+    setSelectedFile(null);
+    setFilePreview(null);
   }, [brand, isOpen]);
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setErrors({ ...errors, logo_url: 'Invalid file type. Allowed: PNG, JPG, SVG, WebP' });
+      return;
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setErrors({ ...errors, logo_url: 'File size must be less than 5MB' });
+      return;
+    }
+
+    setSelectedFile(file);
+    setErrors({ ...errors, logo_url: undefined });
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFilePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle file upload
+  const handleUploadLogo = async () => {
+    if (!selectedFile || !brand?.id) return;
+
+    setUploadingLogo(true);
+    try {
+      const updatedBrand = await uploadBrandLogo(brand.id, selectedFile);
+      setFormData((prev) => ({ ...prev, logo_url: updatedBrand.logo_url || '' }));
+      setSelectedFile(null);
+      setFilePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      setErrors({ ...errors, logo_url: getCatalogErrorMessage(error) });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  // Handle remove logo
+  const handleRemoveLogo = async () => {
+    if (!brand?.id) return;
+
+    setUploadingLogo(true);
+    try {
+      await deleteBrandLogo(brand.id);
+      setFormData((prev) => ({ ...prev, logo_url: '' }));
+    } catch (error) {
+      setErrors({ ...errors, logo_url: getCatalogErrorMessage(error) });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  // Clear file selection
+  const handleClearFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Auto-generate slug from name
   const handleNameChange = (value: string) => {
@@ -342,41 +422,128 @@ export const BrandDialog: React.FC<BrandDialogProps> = ({
               )}
             </div>
 
-            {/* Logo URL */}
+            {/* Logo Upload/URL */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Logo URL
+                Brand Logo
               </label>
-              <Input
-                type="url"
-                value={formData.logo_url}
-                onChange={(e) => handleChange('logo_url', e.target.value)}
-                placeholder="https://example.com/logo.png"
-                className={errors.logo_url ? 'border-red-500' : ''}
-              />
-              {errors.logo_url && (
-                <p className="text-xs text-red-400 mt-1">{errors.logo_url}</p>
-              )}
-              {formData.logo_url && !errors.logo_url && (
-                <div className="mt-2 p-2 bg-secondary/30 border border-border rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-2">Preview:</p>
+
+              {/* Current Logo Preview */}
+              {formData.logo_url && !selectedFile && (
+                <div className="mb-3 p-3 bg-secondary/30 border border-border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-muted-foreground">Current Logo:</p>
+                    {isEditMode && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveLogo}
+                        disabled={uploadingLogo}
+                        loading={uploadingLogo}
+                      >
+                        <X className="w-4 h-4" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
                   <img
                     src={formData.logo_url}
-                    alt="Logo preview"
-                    className="h-12 object-contain"
+                    alt="Current logo"
+                    className="h-16 object-contain"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent) {
-                        const error = document.createElement('p');
-                        error.className = 'text-xs text-red-400';
-                        error.textContent = 'Failed to load image';
-                        parent.appendChild(error);
-                      }
                     }}
                   />
                 </div>
+              )}
+
+              {/* File Upload Section (Edit mode only) */}
+              {isEditMode && (
+                <div className="mb-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.svg,.webp"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+
+                  {/* Selected File Preview */}
+                  {selectedFile && filePreview && (
+                    <div className="mb-3 p-3 bg-secondary/30 border border-border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-muted-foreground">New Logo:</p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleClearFile}
+                        >
+                          <X className="w-4 h-4" />
+                          Clear
+                        </Button>
+                      </div>
+                      <img
+                        src={filePreview}
+                        alt="Logo preview"
+                        className="h-16 object-contain mb-2"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Upload Buttons */}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      leftIcon={<ImageIcon className="w-4 h-4" />}
+                    >
+                      Choose File
+                    </Button>
+                    {selectedFile && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleUploadLogo}
+                        disabled={uploadingLogo}
+                        loading={uploadingLogo}
+                        leftIcon={<Upload className="w-4 h-4" />}
+                      >
+                        Upload Logo
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PNG, JPG, SVG, or WebP (max 5MB)
+                  </p>
+                </div>
+              )}
+
+              {/* Manual URL Input */}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Or enter URL manually:
+                </label>
+                <Input
+                  type="url"
+                  value={formData.logo_url}
+                  onChange={(e) => handleChange('logo_url', e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className={errors.logo_url ? 'border-red-500' : ''}
+                />
+              </div>
+
+              {errors.logo_url && (
+                <p className="text-xs text-red-400 mt-1">{errors.logo_url}</p>
               )}
             </div>
           </div>

@@ -14,6 +14,7 @@ import type {
   BrandCreate,
   BrandUpdate,
   BrandFilters,
+  BrandInfoResponse,
   ModelResponse,
   ModelCreate,
   ModelUpdate,
@@ -71,7 +72,9 @@ interface CatalogState {
   createBrand: (data: BrandCreate) => Promise<BrandResponse>;
   updateBrand: (id: number, data: BrandUpdate) => Promise<BrandResponse>;
   deleteBrand: (id: number) => Promise<void>;
-  fetchBrandInfo: (brandName: string) => Promise<BrandResponse>;
+  uploadBrandLogo: (id: number, file: File) => Promise<BrandResponse>;
+  deleteBrandLogo: (id: number) => Promise<BrandResponse>;
+  fetchBrandInfo: (brandName: string) => Promise<BrandInfoResponse>;
   validateBrand: (id: number) => Promise<any>;
 
   // Models
@@ -133,7 +136,7 @@ const initialState = {
 
 export const useCatalogStore = create<CatalogState>()(
   devtools(
-    (set, get) => ({
+    (set, _get) => ({
       ...initialState,
 
       // ==================== Device Types ====================
@@ -293,6 +296,42 @@ export const useCatalogStore = create<CatalogState>()(
             brands: state.brands.filter((b) => b.id !== id),
             brandsLoading: false,
           }));
+        } catch (error) {
+          set({
+            brandsError: getCatalogErrorMessage(error),
+            brandsLoading: false,
+          });
+          throw error;
+        }
+      },
+
+      uploadBrandLogo: async (id: number, file: File) => {
+        set({ brandsLoading: true, brandsError: null });
+        try {
+          const updatedBrand = await catalogAPI.uploadBrandLogo(id, file);
+          set((state) => ({
+            brands: state.brands.map((b) => (b.id === id ? updatedBrand : b)),
+            brandsLoading: false,
+          }));
+          return updatedBrand;
+        } catch (error) {
+          set({
+            brandsError: getCatalogErrorMessage(error),
+            brandsLoading: false,
+          });
+          throw error;
+        }
+      },
+
+      deleteBrandLogo: async (id: number) => {
+        set({ brandsLoading: true, brandsError: null });
+        try {
+          const updatedBrand = await catalogAPI.deleteBrandLogo(id);
+          set((state) => ({
+            brands: state.brands.map((b) => (b.id === id ? updatedBrand : b)),
+            brandsLoading: false,
+          }));
+          return updatedBrand;
         } catch (error) {
           set({
             brandsError: getCatalogErrorMessage(error),

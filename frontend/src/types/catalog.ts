@@ -7,17 +7,21 @@
 // Enums
 // ============================================================================
 
-export enum DCIMType {
-  NETBOX = 'netbox',
-  RACKTABLES = 'racktables',
-  RALPH = 'ralph',
-}
+export const DCIMType = {
+  NETBOX: 'netbox',
+  RACKTABLES: 'racktables',
+  RALPH: 'ralph',
+} as const;
 
-export enum FetchConfidence {
-  HIGH = 'high',
-  MEDIUM = 'medium',
-  LOW = 'low',
-}
+export type DCIMType = typeof DCIMType[keyof typeof DCIMType];
+
+export const FetchConfidence = {
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low',
+} as const;
+
+export type FetchConfidence = typeof FetchConfidence[keyof typeof FetchConfidence];
 
 // ============================================================================
 // Pagination
@@ -120,6 +124,22 @@ export interface BrandResponse extends BrandBase {
 export interface BrandListResponse {
   items: BrandResponse[];
   pagination: PaginationMetadata;
+}
+
+/**
+ * Brand information fetched from web sources (before saving to database)
+ * Used for preview before creating a brand
+ */
+export interface BrandInfoResponse {
+  name: string;
+  slug: string;
+  website?: string | null;
+  description?: string | null;
+  founded_year?: number | null;
+  headquarters?: string | null;
+  logo_url?: string | null;
+  fetch_confidence: FetchConfidence;
+  fetch_source: string;
 }
 
 // ============================================================================

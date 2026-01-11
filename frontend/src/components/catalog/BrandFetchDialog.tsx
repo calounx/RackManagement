@@ -4,10 +4,10 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { AlertCircle, Globe, Info, CheckCircle } from 'lucide-react';
-import type { BrandResponse } from '../../types/catalog';
+import type { BrandInfoResponse } from '../../types/catalog';
 import { useCatalogStore } from '../../store/useCatalogStore';
 import { getCatalogErrorMessage } from '../../lib/api-catalog';
-import { cn } from '../../lib/utils';
+// import { cn } from '../../lib/utils'; // Removed unused import
 
 interface BrandFetchDialogProps {
   isOpen: boolean;
@@ -26,12 +26,11 @@ export const BrandFetchDialog: React.FC<BrandFetchDialogProps> = ({
 
   const [brandName, setBrandName] = useState('');
   const [fetchState, setFetchState] = useState<FetchState>('idle');
-  const [fetchedData, setFetchedData] = useState<BrandResponse | null>(null);
+  const [fetchedData, setFetchedData] = useState<BrandInfoResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [is501Error, setIs501Error] = useState(false);
 
   // Editable fields in preview mode
-  const [editedData, setEditedData] = useState<Partial<BrandResponse>>({});
+  const [editedData, setEditedData] = useState<Partial<BrandInfoResponse>>({});
 
   const handleFetch = async () => {
     if (!brandName.trim()) {
@@ -41,23 +40,17 @@ export const BrandFetchDialog: React.FC<BrandFetchDialogProps> = ({
 
     setFetchState('fetching');
     setError(null);
-    setIs501Error(false);
 
     try {
       const data = await fetchBrandInfo(brandName.trim());
+
+      // Data fetched successfully, show preview
       setFetchedData(data);
       setEditedData(data);
       setFetchState('preview');
     } catch (err: any) {
       const errorMessage = getCatalogErrorMessage(err);
-
-      // Check if it's a 501 error
-      if (err.response?.status === 501 || errorMessage.includes('501') || errorMessage.includes('Not Implemented')) {
-        setIs501Error(true);
-        setError('Web fetch feature is not yet implemented (Phase 3). This feature will allow fetching brand information from Wikipedia and other web sources.');
-      } else {
-        setError(errorMessage);
-      }
+      setError(errorMessage);
       setFetchState('idle');
     }
   };
@@ -69,15 +62,15 @@ export const BrandFetchDialog: React.FC<BrandFetchDialogProps> = ({
     setError(null);
 
     try {
+      // Create the brand with the edited data
       await createBrand({
         name: editedData.name!,
         slug: editedData.slug!,
-        website: editedData.website || null,
-        support_url: editedData.support_url || null,
-        logo_url: editedData.logo_url || null,
-        description: editedData.description || null,
-        founded_year: editedData.founded_year || null,
-        headquarters: editedData.headquarters || null,
+        website: editedData.website || undefined,
+        logo_url: editedData.logo_url || undefined,
+        description: editedData.description || undefined,
+        founded_year: editedData.founded_year || undefined,
+        headquarters: editedData.headquarters || undefined,
       });
 
       onSuccess?.();
@@ -94,11 +87,10 @@ export const BrandFetchDialog: React.FC<BrandFetchDialogProps> = ({
     setFetchedData(null);
     setEditedData({});
     setError(null);
-    setIs501Error(false);
     onClose();
   };
 
-  const handleEditChange = (field: keyof BrandResponse, value: any) => {
+  const handleEditChange = (field: keyof BrandInfoResponse, value: any) => {
     setEditedData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -136,7 +128,6 @@ export const BrandFetchDialog: React.FC<BrandFetchDialogProps> = ({
                 onChange={(e) => {
                   setBrandName(e.target.value);
                   setError(null);
-                  setIs501Error(false);
                 }}
                 placeholder="e.g., Dell, Cisco, HPE"
                 disabled={fetchState === 'fetching'}
@@ -162,34 +153,15 @@ export const BrandFetchDialog: React.FC<BrandFetchDialogProps> = ({
 
         {/* Error Display */}
         {error && (
-          <div className={cn(
-            "p-4 border rounded-lg flex items-start gap-3",
-            is501Error
-              ? "bg-amber-500/10 border-amber-500/30"
-              : "bg-red-500/10 border-red-500/30"
-          )}>
-            <AlertCircle className={cn(
-              "w-5 h-5 flex-shrink-0 mt-0.5",
-              is501Error ? "text-amber-400" : "text-red-400"
-            )} />
+          <div className="p-4 border rounded-lg flex items-start gap-3 bg-red-500/10 border-red-500/30">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" />
             <div>
-              <h4 className={cn(
-                "text-sm font-medium mb-1",
-                is501Error ? "text-amber-400" : "text-red-400"
-              )}>
-                {is501Error ? 'Feature Not Available Yet' : 'Error'}
+              <h4 className="text-sm font-medium mb-1 text-red-400">
+                Error
               </h4>
-              <p className={cn(
-                "text-sm",
-                is501Error ? "text-amber-300" : "text-red-300"
-              )}>
+              <p className="text-sm text-red-300">
                 {error}
               </p>
-              {is501Error && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  You can still add brands manually using the "Add Brand" button.
-                </p>
-              )}
             </div>
           </div>
         )}

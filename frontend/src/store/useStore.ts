@@ -52,6 +52,7 @@ interface AppState {
 
   // Actions - Devices
   createDevice: (data: any) => Promise<Device | null>;
+  createDeviceFromModel: (data: any) => Promise<Device | null>;
   updateDevice: (id: number, data: any) => Promise<void>;
   deleteDevice: (id: number) => Promise<void>;
   moveDevice: (id: number, rackId: number | null, startUnit: number | null) => Promise<void>;
@@ -284,6 +285,32 @@ export const useStore = create<AppState>()(
             }));
             get().addToast({
               title: 'Device created',
+              description: `${device.name} has been created successfully`,
+              type: 'success',
+            });
+            return device;
+          } catch (error) {
+            const message = getErrorMessage(error);
+            set({ error: message, loading: false });
+            get().addToast({
+              title: 'Error creating device',
+              description: message,
+              type: 'error',
+            });
+            return null;
+          }
+        },
+
+        createDeviceFromModel: async (data) => {
+          set({ loading: true, error: null });
+          try {
+            const device = await api.createDeviceFromModel(data);
+            set((state) => ({
+              devices: [...state.devices, device],
+              loading: false,
+            }));
+            get().addToast({
+              title: 'Device created from catalog',
               description: `${device.name} has been created successfully`,
               type: 'success',
             });

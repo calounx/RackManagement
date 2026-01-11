@@ -3,8 +3,10 @@ HomeRack - Network Rack Optimization System
 Main FastAPI application
 """
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .api import device_specs, devices, racks, connections, health, device_types, brands, models
 from .config import settings
@@ -39,6 +41,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for uploads
+upload_dir = Path(settings.UPLOAD_DIR)
+upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
 # Include API routers
 app.include_router(
