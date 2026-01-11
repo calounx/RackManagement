@@ -32,7 +32,7 @@ export const RackVisualizer: React.FC<RackVisualizerProps> = ({
   const [hoveredUnit, setHoveredUnit] = useState<number | null>(null);
 
   // Create array of rack units (42U standard, numbered from bottom to top)
-  const rackUnits = Array.from({ length: rack.units || 42 }, (_, i) => rack.units - i);
+  const rackUnits = Array.from({ length: rack.total_height_u || 42 }, (_, i) => rack.total_height_u - i);
 
   // Check if a unit is occupied
   const getDeviceAtUnit = (unitNumber: number): Device | null => {
@@ -60,7 +60,7 @@ export const RackVisualizer: React.FC<RackVisualizerProps> = ({
   // Calculate statistics
   const assignedDevices = devices.filter((d) => d.start_unit !== null && d.start_unit !== undefined);
   const usedUnits = assignedDevices.reduce((sum, d) => sum + d.height_units, 0);
-  const utilizationPercent = Math.round((usedUnits / rack.units) * 100);
+  const utilizationPercent = Math.round((usedUnits / rack.total_height_u) * 100);
   const totalPower = assignedDevices.reduce((sum, d) => sum + d.power_consumption_watts, 0);
   const powerPercent = Math.round((totalPower / rack.max_power_watts) * 100);
 
@@ -99,7 +99,7 @@ export const RackVisualizer: React.FC<RackVisualizerProps> = ({
                 </p>
                 <span className="text-muted-foreground">•</span>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {rack.units}U Capacity
+                  {rack.total_height_u}U Capacity
                 </p>
               </div>
             </div>
@@ -218,7 +218,7 @@ export const RackVisualizer: React.FC<RackVisualizerProps> = ({
               </div>
               <p className="text-2xl font-bold text-amber text-center">
                 {usedUnits}
-                <span className="text-lg text-muted-foreground">/{rack.units}</span>
+                <span className="text-lg text-muted-foreground">/{rack.total_height_u}</span>
               </p>
             </motion.div>
 

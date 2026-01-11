@@ -20,7 +20,7 @@ NC='\033[0m'
 echo -e "${BLUE}[1/7] Installing system dependencies...${NC}"
 ssh $REMOTE_USER@$REMOTE_HOST << 'ENDSSH'
 sudo apt-get update
-sudo apt-get install -y python3.11 python3.11-venv python3-pip redis-server \
+sudo apt-get install -y python3 python3-venv python3-pip redis-server \
     tesseract-ocr poppler-utils
 sudo systemctl enable redis-server
 sudo systemctl start redis-server
@@ -39,7 +39,7 @@ echo -e "${GREEN}✓ Files copied${NC}"
 echo -e "${BLUE}[4/7] Setting up Python virtual environment...${NC}"
 ssh $REMOTE_USER@$REMOTE_HOST << ENDSSH
 cd $REMOTE_DIR/backend
-python3.11 -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt

@@ -74,8 +74,8 @@ export const DeviceAssignDialog: React.FC<DeviceAssignDialogProps> = ({
 
   // Check if placement is valid
   const getPlacementValidation = () => {
-    if (targetUnit < 1 || targetUnit > rack.units) {
-      return { valid: false, message: `Unit must be between 1 and ${rack.units}` };
+    if (targetUnit < 1 || targetUnit > rack.total_height_u) {
+      return { valid: false, message: `Unit must be between 1 and ${rack.total_height_u}` };
     }
 
     if (deviceHeightUnits === 0) {
@@ -83,10 +83,10 @@ export const DeviceAssignDialog: React.FC<DeviceAssignDialogProps> = ({
     }
 
     const endUnit = targetUnit + deviceHeightUnits - 1;
-    if (endUnit > rack.units) {
+    if (endUnit > rack.total_height_u) {
       return {
         valid: false,
-        message: `Device needs ${deviceHeightUnits}U but only ${rack.units - targetUnit + 1}U available`
+        message: `Device needs ${deviceHeightUnits}U but only ${rack.total_height_u - targetUnit + 1}U available`
       };
     }
 
@@ -336,7 +336,7 @@ export const DeviceAssignDialog: React.FC<DeviceAssignDialogProps> = ({
               id="unit"
               type="number"
               min="1"
-              max={rack.units}
+              max={rack.total_height_u}
               value={targetUnit}
               onChange={(e) => setTargetUnit(parseInt(e.target.value) || 1)}
               className="w-32"
@@ -349,7 +349,7 @@ export const DeviceAssignDialog: React.FC<DeviceAssignDialogProps> = ({
           {/* Visual Unit Selector */}
           <div className="max-h-48 overflow-y-auto border border-border rounded-lg p-2 bg-secondary/20">
             <div className="space-y-1">
-              {Array.from({ length: rack.units }, (_, i) => rack.units - i).map((unitNumber) => {
+              {Array.from({ length: rack.total_height_u }, (_, i) => rack.total_height_u - i).map((unitNumber) => {
                 const rackDevices = devices.filter(d => d.rack_id === rack.id);
                 const deviceAtUnit = rackDevices.find(d => {
                   if (!d.start_unit) return false;

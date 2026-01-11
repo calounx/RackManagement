@@ -416,3 +416,294 @@ class BOMResponse(BaseModel):
     cable_summary: Dict[str, int]  # e.g., {"Cat6 2m": 10}
     total_cables: int
     total_cost: Optional[float] = None
+
+
+# ============================================================================
+# Catalog Schemas - New device catalog system
+# ============================================================================
+
+class DCIMType(str, Enum):
+    """DCIM system types"""
+    NETBOX = "netbox"
+    RACKTABLES = "racktables"
+    RALPH = "ralph"
+
+
+class FetchConfidence(str, Enum):
+    """Confidence level for fetched data"""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+# Pagination helper
+class PaginationMetadata(BaseModel):
+    """Pagination metadata for list responses"""
+    total: int = Field(..., description="Total number of items")
+    page: int = Field(..., ge=1, description="Current page number")
+    page_size: int = Field(..., ge=1, le=100, description="Items per page")
+    total_pages: int = Field(..., ge=0, description="Total number of pages")
+
+
+# DeviceType Schemas
+class DeviceTypeBase(BaseModel):
+    """Base device type schema with shared fields"""
+    name: str = Field(..., min_length=1, max_length=100, description="Device type name")
+    slug: str = Field(..., min_length=1, max_length=100, description="URL-friendly identifier")
+    icon: Optional[str] = Field(None, max_length=50, description="Emoji or unicode character")
+    description: Optional[str] = Field(None, description="Device type description")
+    color: Optional[str] = Field(None, max_length=50, description="UI color code (e.g., #FF5733)")
+
+
+class DeviceTypeCreate(DeviceTypeBase):
+    """Schema for creating device type"""
+    pass
+
+
+class DeviceTypeUpdate(BaseModel):
+    """Schema for updating device type"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100, description="Device type name")
+    slug: Optional[str] = Field(None, min_length=1, max_length=100, description="URL-friendly identifier")
+    icon: Optional[str] = Field(None, max_length=50, description="Emoji or unicode character")
+    description: Optional[str] = Field(None, description="Device type description")
+    color: Optional[str] = Field(None, max_length=50, description="UI color code")
+
+
+class DeviceTypeSummary(BaseModel):
+    """Minimal device type info for nested responses"""
+    id: int
+    name: str
+    slug: str
+    icon: Optional[str]
+    color: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceTypeResponse(DeviceTypeBase):
+    """Schema for device type response with full details"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    model_count: int = Field(0, description="Number of models using this type")
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceTypeListResponse(BaseModel):
+    """Paginated list of device types"""
+    items: List[DeviceTypeResponse]
+    pagination: PaginationMetadata
+
+
+# Brand Schemas
+class BrandBase(BaseModel):
+    """Base brand schema with shared fields"""
+    name: str = Field(..., min_length=1, max_length=200, description="Brand name")
+    slug: str = Field(..., min_length=1, max_length=200, description="URL-friendly identifier")
+    website: Optional[str] = Field(None, max_length=500, description="Official website URL")
+    support_url: Optional[str] = Field(None, max_length=500, description="Support/documentation URL")
+    logo_url: Optional[str] = Field(None, max_length=500, description="Brand logo image URL")
+    description: Optional[str] = Field(None, description="Brand description")
+    founded_year: Optional[int] = Field(None, ge=1800, le=2100, description="Year founded")
+    headquarters: Optional[str] = Field(None, max_length=200, description="Headquarters location")
+
+
+class BrandCreate(BrandBase):
+    """Schema for creating brand"""
+    pass
+
+
+class BrandUpdate(BaseModel):
+    """Schema for updating brand"""
+    name: Optional[str] = Field(None, min_length=1, max_length=200, description="Brand name")
+    slug: Optional[str] = Field(None, min_length=1, max_length=200, description="URL-friendly identifier")
+    website: Optional[str] = Field(None, max_length=500, description="Official website URL")
+    support_url: Optional[str] = Field(None, max_length=500, description="Support/documentation URL")
+    logo_url: Optional[str] = Field(None, max_length=500, description="Brand logo image URL")
+    description: Optional[str] = Field(None, description="Brand description")
+    founded_year: Optional[int] = Field(None, ge=1800, le=2100, description="Year founded")
+    headquarters: Optional[str] = Field(None, max_length=200, description="Headquarters location")
+
+
+class BrandSummary(BaseModel):
+    """Minimal brand info for nested responses"""
+    id: int
+    name: str
+    slug: str
+    logo_url: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class BrandResponse(BrandBase):
+    """Schema for brand response with full details"""
+    id: int
+    last_fetched_at: Optional[datetime] = Field(None, description="When brand info was last fetched")
+    fetch_confidence: Optional[FetchConfidence] = Field(None, description="Confidence in fetched data")
+    fetch_source: Optional[str] = Field(None, max_length=100, description="Source of fetched data")
+    created_at: datetime
+    updated_at: datetime
+    model_count: int = Field(0, description="Number of models from this brand")
+
+    class Config:
+        from_attributes = True
+
+
+class BrandListResponse(BaseModel):
+    """Paginated list of brands"""
+    items: List[BrandResponse]
+    pagination: PaginationMetadata
+
+
+# Model Schemas
+class ModelBase(BaseModel):
+    """Base model schema with shared physical/technical fields"""
+    name: str = Field(..., min_length=1, max_length=200, description="Model name")
+    variant: Optional[str] = Field(None, max_length=100, description="Model variant (e.g., AC, DC, PoE+)")
+    description: Optional[str] = Field(None, description="Model description")
+
+    # Lifecycle
+    release_date: Optional[datetime] = Field(None, description="Product release date")
+    end_of_life: Optional[datetime] = Field(None, description="End of life date")
+
+    # Physical dimensions
+    height_u: float = Field(..., ge=0, le=50, description="Height in rack units")
+    width_type: Optional[str] = Field(None, max_length=10, description="Width type (e.g., 19\", 23\")")
+    depth_mm: Optional[float] = Field(None, ge=0, le=1500, description="Depth in millimeters")
+    weight_kg: Optional[float] = Field(None, ge=0, le=500, description="Weight in kilograms")
+
+    # Power and thermal
+    power_watts: Optional[float] = Field(None, ge=0, le=10000, description="Power consumption in watts")
+    heat_output_btu: Optional[float] = Field(None, ge=0, description="Heat output in BTU/hr")
+    airflow_pattern: Optional[str] = Field(None, max_length=50, description="Airflow pattern")
+    max_operating_temp_c: Optional[float] = Field(None, ge=-20, le=100, description="Max operating temperature")
+
+    # Connectivity
+    typical_ports: Optional[Dict[str, int]] = Field(None, description="Typical port configuration")
+
+    # Mounting
+    mounting_type: Optional[str] = Field(None, max_length=100, description="Mounting type")
+
+    # Documentation
+    datasheet_url: Optional[str] = Field(None, max_length=500, description="Datasheet URL")
+    image_url: Optional[str] = Field(None, max_length=500, description="Product image URL")
+
+
+class ModelCreate(ModelBase):
+    """Schema for creating model"""
+    brand_id: int = Field(..., gt=0, description="Brand ID")
+    device_type_id: int = Field(..., gt=0, description="Device type ID")
+    source: Optional[str] = Field(None, max_length=50, description="Data source")
+    confidence: Optional[str] = Field(None, max_length=20, description="Data confidence level")
+
+
+class ModelUpdate(BaseModel):
+    """Schema for updating model - all fields optional"""
+    brand_id: Optional[int] = Field(None, gt=0, description="Brand ID")
+    device_type_id: Optional[int] = Field(None, gt=0, description="Device type ID")
+    name: Optional[str] = Field(None, min_length=1, max_length=200, description="Model name")
+    variant: Optional[str] = Field(None, max_length=100, description="Model variant")
+    description: Optional[str] = Field(None, description="Model description")
+    release_date: Optional[datetime] = Field(None, description="Product release date")
+    end_of_life: Optional[datetime] = Field(None, description="End of life date")
+    height_u: Optional[float] = Field(None, ge=0, le=50, description="Height in rack units")
+    width_type: Optional[str] = Field(None, max_length=10, description="Width type")
+    depth_mm: Optional[float] = Field(None, ge=0, le=1500, description="Depth in millimeters")
+    weight_kg: Optional[float] = Field(None, ge=0, le=500, description="Weight in kilograms")
+    power_watts: Optional[float] = Field(None, ge=0, le=10000, description="Power consumption in watts")
+    heat_output_btu: Optional[float] = Field(None, ge=0, description="Heat output in BTU/hr")
+    airflow_pattern: Optional[str] = Field(None, max_length=50, description="Airflow pattern")
+    max_operating_temp_c: Optional[float] = Field(None, ge=-20, le=100, description="Max operating temperature")
+    typical_ports: Optional[Dict[str, int]] = Field(None, description="Typical port configuration")
+    mounting_type: Optional[str] = Field(None, max_length=100, description="Mounting type")
+    datasheet_url: Optional[str] = Field(None, max_length=500, description="Datasheet URL")
+    image_url: Optional[str] = Field(None, max_length=500, description="Product image URL")
+    source: Optional[str] = Field(None, max_length=50, description="Data source")
+    confidence: Optional[str] = Field(None, max_length=20, description="Data confidence level")
+
+
+class ModelResponse(ModelBase):
+    """Schema for model response with full details and relationships"""
+    id: int
+    brand_id: int
+    device_type_id: int
+    brand: BrandSummary = Field(..., description="Brand information")
+    device_type: DeviceTypeSummary = Field(..., description="Device type information")
+    source: Optional[str] = Field(None, description="Data source")
+    confidence: Optional[str] = Field(None, description="Data confidence level")
+    fetched_at: Optional[datetime] = Field(None, description="When data was fetched")
+    last_updated: datetime
+    device_count: int = Field(0, description="Number of devices using this model")
+
+    class Config:
+        from_attributes = True
+
+
+class ModelListResponse(BaseModel):
+    """Paginated list of models"""
+    items: List[ModelResponse]
+    pagination: PaginationMetadata
+
+
+# DCIMConnection Schemas
+class DCIMConnectionBase(BaseModel):
+    """Base DCIM connection schema with shared fields"""
+    name: str = Field(..., min_length=1, max_length=200, description="Connection name")
+    type: DCIMType = Field(..., description="DCIM system type")
+    base_url: str = Field(..., min_length=1, max_length=500, description="Base URL of DCIM system")
+    api_token: Optional[str] = Field(None, max_length=500, description="API authentication token")
+    is_public: bool = Field(False, description="Whether this is a public instance")
+
+
+class DCIMConnectionCreate(DCIMConnectionBase):
+    """Schema for creating DCIM connection"""
+    pass
+
+
+class DCIMConnectionUpdate(BaseModel):
+    """Schema for updating DCIM connection"""
+    name: Optional[str] = Field(None, min_length=1, max_length=200, description="Connection name")
+    type: Optional[DCIMType] = Field(None, description="DCIM system type")
+    base_url: Optional[str] = Field(None, min_length=1, max_length=500, description="Base URL")
+    api_token: Optional[str] = Field(None, max_length=500, description="API authentication token")
+    is_public: Optional[bool] = Field(None, description="Whether this is a public instance")
+
+
+class DCIMConnectionResponse(DCIMConnectionBase):
+    """Schema for DCIM connection response with sync status"""
+    id: int
+    last_sync: Optional[datetime] = Field(None, description="Last successful sync timestamp")
+    sync_status: Optional[str] = Field(None, max_length=50, description="Current sync status")
+    created_at: datetime
+    updated_at: datetime
+
+    # Mask API token in responses
+    api_token: Optional[str] = Field(None, description="API token (masked)")
+
+    @validator('api_token', always=True)
+    def mask_api_token(cls, v):
+        """Mask API token for security"""
+        if v and len(v) > 8:
+            return f"{v[:4]}{'*' * (len(v) - 8)}{v[-4:]}"
+        return "****" if v else None
+
+    class Config:
+        from_attributes = True
+
+
+class DCIMConnectionListResponse(BaseModel):
+    """Paginated list of DCIM connections"""
+    items: List[DCIMConnectionResponse]
+    pagination: PaginationMetadata
+
+
+class DCIMConnectionTestResult(BaseModel):
+    """Result of testing a DCIM connection"""
+    success: bool = Field(..., description="Whether connection test succeeded")
+    message: str = Field(..., description="Test result message")
+    response_time_ms: Optional[float] = Field(None, description="API response time in milliseconds")
+    system_info: Optional[Dict[str, Any]] = Field(None, description="System information from DCIM")

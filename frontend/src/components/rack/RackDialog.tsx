@@ -16,7 +16,7 @@ interface RackDialogProps {
 interface FormErrors {
   name?: string;
   location?: string;
-  units?: string;
+  total_height_u?: string;
   depth_mm?: string;
   max_power_watts?: string;
   max_weight_kg?: string;
@@ -38,7 +38,7 @@ export const RackDialog: React.FC<RackDialogProps> = ({
     name: '',
     location: '',
     // Physical Dimensions
-    units: 42,
+    total_height_u: 42,
     width_inches: 19,
     depth_mm: 700,
     // Capacity Limits
@@ -59,7 +59,7 @@ export const RackDialog: React.FC<RackDialogProps> = ({
       setFormData({
         name: rack.name,
         location: rack.location,
-        units: rack.units,
+        total_height_u: rack.total_height_u,
         width_inches: rack.width_inches || 19,
         depth_mm: rack.depth_mm || 700,
         max_power_watts: rack.max_power_watts,
@@ -74,7 +74,7 @@ export const RackDialog: React.FC<RackDialogProps> = ({
       setFormData({
         name: '',
         location: '',
-        units: 42,
+        total_height_u: 42,
         width_inches: 19,
         depth_mm: 700,
         max_power_watts: 5000,
@@ -101,8 +101,8 @@ export const RackDialog: React.FC<RackDialogProps> = ({
     }
 
     // Numeric validations
-    if (formData.units < 1 || formData.units > 100) {
-      newErrors.units = 'Height must be between 1 and 100 U';
+    if (formData.total_height_u < 1 || formData.total_height_u > 100) {
+      newErrors.total_height_u = 'Height must be between 1 and 100 U';
     }
     if (formData.depth_mm < 200 || formData.depth_mm > 1500) {
       newErrors.depth_mm = 'Depth must be between 200 and 1500 mm';
@@ -144,6 +144,8 @@ export const RackDialog: React.FC<RackDialogProps> = ({
       return acc;
     }, {} as any);
 
+    console.log('[RackDialog] FormData:', formData);
+    console.log('[RackDialog] Cleaned Data:', cleanedData);
     onSave(cleanedData);
     onClose();
   };
@@ -210,10 +212,10 @@ export const RackDialog: React.FC<RackDialogProps> = ({
               type="number"
               min="1"
               max="100"
-              value={formData.units}
-              onChange={(e) => setFormData({ ...formData, units: parseInt(e.target.value) || 1 })}
+              value={formData.total_height_u}
+              onChange={(e) => setFormData({ ...formData, total_height_u: parseInt(e.target.value) || 1 })}
               placeholder="42"
-              error={errors.units}
+              error={errors.total_height_u}
             />
             <Select
               label="Width"

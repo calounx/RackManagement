@@ -6,7 +6,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import device_specs, devices, racks, connections, health
+from .api import device_specs, devices, racks, connections, health, device_types, brands, models
 from .config import settings
 from .middleware.error_handlers import register_exception_handlers
 from .middleware.request_id import RequestIDMiddleware
@@ -64,6 +64,23 @@ app.include_router(
 app.include_router(
     health.router,
     prefix="/api"
+)
+
+# Catalog Management (Phase 1 - New)
+app.include_router(
+    device_types.router,
+    prefix="/api/device-types",
+    tags=["Device Types"]
+)
+app.include_router(
+    brands.router,
+    prefix="/api/brands",
+    tags=["Brands"]
+)
+app.include_router(
+    models.router,
+    prefix="/api/models",
+    tags=["Models"]
 )
 
 @app.get("/")

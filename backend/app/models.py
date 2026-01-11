@@ -1,7 +1,7 @@
 """
 SQLAlchemy database models
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, ForeignKey, Enum, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, ForeignKey, Enum, DateTime, Text, Date, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -72,6 +72,28 @@ class RoutingPath(str, enum.Enum):
     CONDUIT = "conduit"
 
 
+class FetchConfidence(str, enum.Enum):
+    """Confidence level for fetched data"""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class DCIMType(str, enum.Enum):
+    """DCIM system types"""
+    NETBOX = "netbox"
+    RACKTABLES = "racktables"
+    RALPH = "ralph"
+
+
+class MigrationStatus(str, enum.Enum):
+    """Status of migration from DeviceSpecification to Model"""
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class DeviceSpecification(Base):
     """Device specification lookup database"""
     __tablename__ = "device_specifications"
@@ -106,8 +128,14 @@ class DeviceSpecification(Base):
     fetched_at = Column(DateTime, nullable=True)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Migration fields (transition to new Model system)
+    migrated_to_model_id = Column(Integer, ForeignKey("models.id"), nullable=True)
+    migration_status = Column(Enum(MigrationStatus), nullable=True)
+    deprecated = Column(Boolean, default=False)
+
     # Relationships
     devices = relationship("Device", back_populates="specification")
+    migrated_to_model = relationship("Model", foreign_keys=[migrated_to_model_id])
 
 
 class Device(Base):
@@ -117,8 +145,11 @@ class Device(Base):
     id = Column(Integer, primary_key=True, index=True)
     custom_name = Column(String, nullable=False)
 
-    # Link to specification
+    # Link to specification (legacy)
     specification_id = Column(Integer, ForeignKey("device_specifications.id"), nullable=False)
+
+    # Link to new catalog model (optional during transition)
+    model_id = Column(Integer, ForeignKey("models.id"), nullable=True)
 
     # Quick reference (denormalized for performance)
     brand = Column(String, index=True)
@@ -130,6 +161,7 @@ class Device(Base):
 
     # Relationships
     specification = relationship("DeviceSpecification", back_populates="devices")
+    catalog_model = relationship("Model", back_populates="devices")
     rack_positions = relationship("RackPosition", back_populates="device", cascade="all, delete-orphan")
     connections_from = relationship("Connection", foreign_keys="[Connection.from_device_id]", back_populates="from_device")
     connections_to = relationship("Connection", foreign_keys="[Connection.to_device_id]", back_populates="to_device")
@@ -203,3 +235,128 @@ class Connection(Base):
     # Relationships
     from_device = relationship("Device", foreign_keys=[from_device_id], back_populates="connections_from")
     to_device = relationship("Device", foreign_keys=[to_device_id], back_populates="connections_to")
+
+
+# ============================================================================
+# Catalog Models - New device catalog system
+# ============================================================================
+
+
+class DeviceType(Base):
+    """Device type categories (e.g., Switch, Server, Firewall)"""
+    __tablename__ = "device_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    slug = Column(String(100), unique=True, nullable=False, index=True)
+    icon = Column(String(50), nullable=True)  # emoji/unicode character
+    description = Column(Text, nullable=True)
+    color = Column(String(50), nullable=True)  # UI color coding (e.g., "#FF5733")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    models = relationship("Model", back_populates="device_type")
+
+
+class Brand(Base):
+    """Hardware manufacturer/brand information"""
+    __tablename__ = "brands"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), unique=True, nullable=False, index=True)
+    slug = Column(String(200), unique=True, nullable=False, index=True)
+    website = Column(String(500), nullable=True)
+    support_url = Column(String(500), nullable=True)
+    logo_url = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)
+    founded_year = Column(Integer, nullable=True)
+    headquarters = Column(String(200), nullable=True)
+
+    # Metadata for web-fetched information
+    last_fetched_at = Column(DateTime, nullable=True)
+    fetch_confidence = Column(Enum(FetchConfidence), nullable=True)
+    fetch_source = Column(String(100), nullable=True)  # e.g., "wikipedia", "official_website"
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    models = relationship("Model", back_populates="brand")
+
+
+class Model(Base):
+    """Device model specifications from catalog"""
+    __tablename__ = "models"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Foreign keys
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False, index=True)
+    device_type_id = Column(Integer, ForeignKey("device_types.id"), nullable=False, index=True)
+
+    # Model identification
+    name = Column(String(200), nullable=False, index=True)
+    variant = Column(String(100), nullable=True)  # e.g., "AC", "DC", "PoE+"
+    description = Column(Text, nullable=True)
+
+    # Lifecycle
+    release_date = Column(Date, nullable=True)
+    end_of_life = Column(Date, nullable=True)
+
+    # Physical dimensions
+    height_u = Column(Float, nullable=False)
+    width_type = Column(String(10), nullable=True)  # "19\"", "23\"", etc.
+    depth_mm = Column(Float, nullable=True)
+    weight_kg = Column(Float, nullable=True)
+
+    # Power and thermal
+    power_watts = Column(Float, nullable=True)
+    heat_output_btu = Column(Float, nullable=True)
+    airflow_pattern = Column(String(50), nullable=True)  # "front_to_back", "side_to_side", etc.
+    max_operating_temp_c = Column(Float, nullable=True)
+
+    # Connectivity
+    typical_ports = Column(JSON, nullable=True)  # {"gigabit_ethernet": 48, "sfp": 2, ...}
+
+    # Mounting
+    mounting_type = Column(String(100), nullable=True)  # "2-post", "4-post", "wall-mount"
+
+    # Documentation
+    datasheet_url = Column(String(500), nullable=True)
+    image_url = Column(String(500), nullable=True)
+
+    # Source metadata
+    source = Column(String(50), nullable=True)  # "netbox", "deviceatlas", "manual"
+    confidence = Column(String(20), nullable=True)  # "high", "medium", "low"
+    fetched_at = Column(DateTime, nullable=True)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    brand = relationship("Brand", back_populates="models")
+    device_type = relationship("DeviceType", back_populates="models")
+    devices = relationship("Device", back_populates="catalog_model")
+
+    # Indexes and constraints
+    __table_args__ = (
+        Index("ix_models_brand_name_variant", "brand_id", "name", "variant", unique=True),
+    )
+
+
+class DCIMConnection(Base):
+    """External DCIM system connections for importing device catalogs"""
+    __tablename__ = "dcim_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    type = Column(Enum(DCIMType), nullable=False)  # netbox, racktables, ralph
+    base_url = Column(String(500), nullable=False)
+    api_token = Column(String(500), nullable=True)  # Will be encrypted in production
+    is_public = Column(Boolean, default=False)  # Public instances don't need auth
+
+    # Sync metadata
+    last_sync = Column(DateTime, nullable=True)
+    sync_status = Column(String(50), nullable=True)  # "success", "failed", "in_progress"
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

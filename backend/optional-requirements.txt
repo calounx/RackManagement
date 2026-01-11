@@ -1,0 +1,7 @@
+# Optional dependencies for advanced PDF features
+# These are not required for Phase 1 (catalog management)
+# Install with: pip install -r optional-requirements.txt
+
+# PyMuPDF - Alternative PDF processing library
+# Note: May require system build tools and may not have wheels for all Python versions
+# PyMuPDF==1.24.0  # Uncomment when needed for advanced PDF features

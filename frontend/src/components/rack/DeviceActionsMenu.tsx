@@ -32,15 +32,15 @@ export const DeviceActionsMenu: React.FC<DeviceActionsMenuProps> = ({
 
   // Check if placement is valid
   const getPlacementValidation = () => {
-    if (targetUnit < 1 || targetUnit > targetRack.units) {
-      return { valid: false, message: `Unit must be between 1 and ${targetRack.units}` };
+    if (targetUnit < 1 || targetUnit > targetRack.total_height_u) {
+      return { valid: false, message: `Unit must be between 1 and ${targetRack.total_height_u}` };
     }
 
     const endUnit = targetUnit + device.height_units - 1;
-    if (endUnit > targetRack.units) {
+    if (endUnit > targetRack.total_height_u) {
       return {
         valid: false,
-        message: `Device needs ${device.height_units}U but only ${targetRack.units - targetUnit + 1}U available`
+        message: `Device needs ${device.height_units}U but only ${targetRack.total_height_u - targetUnit + 1}U available`
       };
     }
 
@@ -206,7 +206,7 @@ export const DeviceActionsMenu: React.FC<DeviceActionsMenuProps> = ({
                 id="targetUnit"
                 type="number"
                 min="1"
-                max={targetRack.units}
+                max={targetRack.total_height_u}
                 value={targetUnit}
                 onChange={(e) => setTargetUnit(parseInt(e.target.value) || 1)}
                 className="w-32"
@@ -219,7 +219,7 @@ export const DeviceActionsMenu: React.FC<DeviceActionsMenuProps> = ({
             {/* Visual Unit Selector */}
             <div className="max-h-48 overflow-y-auto border border-border rounded-lg p-2 bg-secondary/20">
               <div className="space-y-1">
-                {Array.from({ length: targetRack.units }, (_, i) => targetRack.units - i).map((unitNumber) => {
+                {Array.from({ length: targetRack.total_height_u }, (_, i) => targetRack.total_height_u - i).map((unitNumber) => {
                   const rackDevices = devices.filter(d => d.rack_id === targetRackId && d.id !== device.id);
                   const deviceAtUnit = rackDevices.find(d => {
                     if (!d.start_unit) return false;

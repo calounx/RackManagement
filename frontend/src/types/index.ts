@@ -4,7 +4,7 @@ export interface Rack {
   id: number;
   name: string;
   location: string;
-  units: number;
+  total_height_u: number;
   width_inches?: number;
   depth_mm?: number;
   max_power_watts: number;
@@ -22,7 +22,7 @@ export interface Rack {
 export interface RackCreate {
   name: string;
   location: string;
-  units?: number;
+  total_height_u?: number;
   width_inches?: number;
   depth_mm?: number;
   max_power_watts?: number;
@@ -78,20 +78,32 @@ export interface DeviceCreate {
 }
 
 export interface DeviceSpec {
+  // Backend fields (primary)
   id: number;
-  manufacturer: string;
+  brand: string;
   model: string;
-  device_type: string;
-  height_units: number;
-  power_consumption_watts: number;
+  variant: string | null;
+  height_u: number;
+  width_type: string;
+  depth_mm: number;
   weight_kg: number;
-  max_temperature_celsius: number;
-  dimensions_mm: string | null;
-  ports: PortSpec[];
-  specifications: Record<string, any>;
-  datasheet_url: string | null;
-  created_at: string;
-  updated_at: string;
+  power_watts: number;
+  heat_output_btu: number;
+  airflow_pattern: string;
+  max_operating_temp_c: number;
+  typical_ports: Record<string, number> | null;
+  mounting_type: string;
+  source: string;
+  source_url: string | null;
+  confidence: string;
+  fetched_at: string | null;
+  last_updated: string;
+  device_type: string; // Inferred from brand/model until backend provides it
+
+  // Frontend-compatible aliases (for backwards compatibility)
+  manufacturer: string; // Alias for brand
+  height_units: number; // Alias for height_u
+  power_consumption_watts: number; // Alias for power_watts
 }
 
 export interface PortSpec {
@@ -366,4 +378,52 @@ export interface HealthStatus {
   api_version: string;
   uptime_seconds: number;
   timestamp: string;
+}
+
+// ==================== Device Catalog Management ====================
+
+export interface DeviceTypeInfo {
+  id: number;
+  name: string;
+  value: DeviceType;
+  icon: string;
+  color: string;
+  brandsCount?: number;
+  modelsCount?: number;
+  description?: string;
+}
+
+export interface DeviceTypeCreate {
+  name: string;
+  value: DeviceType;
+  icon: string;
+  color: string;
+  description?: string;
+}
+
+export interface Brand {
+  id: number;
+  name: string;
+  device_types: DeviceType[];
+  modelsCount?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BrandCreate {
+  name: string;
+  device_types?: DeviceType[];
+}
+
+export interface ModelInfo {
+  id: number;
+  brand: string;
+  model: string;
+  device_type: DeviceType;
+  height_units: number;
+  power_consumption_watts: number;
+  weight_kg: number;
+  usageCount?: number;
+  created_at: string;
+  updated_at: string;
 }

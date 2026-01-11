@@ -295,7 +295,7 @@ class PDFParser(BaseParser):
         """
         Parse PDF content to extract specifications.
 
-        Uses pdfplumber for table extraction and PyMuPDF for text extraction.
+        Uses pdfplumber for table and text extraction.
         """
         import pdfplumber
         import io

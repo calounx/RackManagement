@@ -112,6 +112,8 @@ class API {
 
   // ==================== Data Transformers ====================
 
+  // TODO: Backend should provide device_type field in DeviceSpec
+  // For now, infer from brand/model as temporary solution
   private inferDeviceType(brand?: string, model?: string): string {
     const combined = `${brand} ${model}`.toLowerCase();
     if (combined.includes('switch')) return 'switch';
@@ -122,11 +124,6 @@ class API {
     if (combined.includes('pdu')) return 'pdu';
     if (combined.includes('ups')) return 'ups';
     return 'other';
-  }
-
-  private inferDeviceStatus(_device: any): 'active' | 'inactive' | 'maintenance' | 'error' {
-    // Since backend doesn't have status field, default to active
-    return 'active';
   }
 
   private transformPorts(typicalPorts?: any): any[] {
@@ -153,7 +150,7 @@ class API {
       power_consumption_watts: spec.power_watts || 0,
       weight_kg: spec.weight_kg || 0,
       temperature_celsius: backendDevice.temperature_celsius || 25,
-      status: this.inferDeviceStatus(backendDevice),
+      status: backendDevice.status || 'active',
       ip_address: backendDevice.ip_address || null,
       mac_address: backendDevice.mac_address || null,
       serial_number: backendDevice.serial_number || null,
@@ -162,20 +159,19 @@ class API {
       updated_at: backendDevice.last_updated || new Date().toISOString(),
       spec_id: backendDevice.specification_id,
       spec: spec ? {
-        id: spec.id,
+        ...spec,
+        // Map backend field names to frontend (for backwards compatibility)
         manufacturer: spec.brand,
-        model: spec.model,
         device_type: this.inferDeviceType(spec.brand, spec.model),
-        height_units: spec.height_u || 1,
-        power_consumption_watts: spec.power_watts || 0,
-        weight_kg: spec.weight_kg || 0,
-        max_temperature_celsius: spec.max_operating_temp_c || 70,
+        height_units: spec.height_u,
+        power_consumption_watts: spec.power_watts,
+        max_temperature_celsius: spec.max_operating_temp_c,
         dimensions_mm: spec.depth_mm ? `${spec.depth_mm}mm depth` : null,
         ports: this.transformPorts(spec.typical_ports),
         specifications: spec,
         datasheet_url: spec.source_url || null,
-        created_at: spec.fetched_at || new Date().toISOString(),
-        updated_at: spec.last_updated || new Date().toISOString(),
+        created_at: spec.fetched_at || spec.last_updated,
+        updated_at: spec.last_updated,
       } : undefined,
     };
   }
@@ -192,7 +188,7 @@ class API {
       id: backendRack.id,
       name: backendRack.name,
       location: backendRack.location || 'Unknown',
-      units: backendRack.total_height_u || 42,
+      total_height_u: backendRack.total_height_u || 42,
       width_inches: width_inches,
       depth_mm: backendRack.depth_mm || undefined,
       max_power_watts: backendRack.max_power_watts || 5000,
@@ -221,41 +217,22 @@ class API {
   }
 
   async createRack(data: RackCreate): Promise<Rack> {
-    // Transform frontend field names to backend field names
-    const backendData: any = {
-      name: data.name,
-      location: data.location,
-    };
-    if (data.units !== undefined) backendData.total_height_u = data.units;
-    if (data.width_inches !== undefined) backendData.width_inches = `${data.width_inches}"`;
-    if (data.depth_mm !== undefined) backendData.depth_mm = data.depth_mm;
-    if (data.max_power_watts !== undefined) backendData.max_power_watts = data.max_power_watts;
-    if (data.max_weight_kg !== undefined) backendData.max_weight_kg = data.max_weight_kg;
-    if (data.cooling_type !== undefined) backendData.cooling_type = data.cooling_type;
-    if (data.cooling_capacity_btu !== undefined) backendData.cooling_capacity_btu = data.cooling_capacity_btu;
-    if (data.ambient_temp_c !== undefined) backendData.ambient_temp_c = data.ambient_temp_c;
-    if (data.max_inlet_temp_c !== undefined) backendData.max_inlet_temp_c = data.max_inlet_temp_c;
-    if (data.airflow_cfm !== undefined) backendData.airflow_cfm = data.airflow_cfm;
+    // Transform width_inches to backend format (only transformation needed)
+    const backendData: any = { ...data };
+    if (data.width_inches !== undefined) {
+      backendData.width_inches = `${data.width_inches}"`;
+    }
 
     const response = await this.client.post('/racks/', backendData);
     return this.transformRack(response.data);
   }
 
   async updateRack(id: number, data: Partial<RackCreate>): Promise<Rack> {
-    // Transform frontend field names to backend field names
-    const backendData: any = {};
-    if (data.name !== undefined) backendData.name = data.name;
-    if (data.location !== undefined) backendData.location = data.location;
-    if (data.units !== undefined) backendData.total_height_u = data.units;
-    if (data.width_inches !== undefined) backendData.width_inches = `${data.width_inches}"`;
-    if (data.depth_mm !== undefined) backendData.depth_mm = data.depth_mm;
-    if (data.max_power_watts !== undefined) backendData.max_power_watts = data.max_power_watts;
-    if (data.max_weight_kg !== undefined) backendData.max_weight_kg = data.max_weight_kg;
-    if (data.cooling_type !== undefined) backendData.cooling_type = data.cooling_type;
-    if (data.cooling_capacity_btu !== undefined) backendData.cooling_capacity_btu = data.cooling_capacity_btu;
-    if (data.ambient_temp_c !== undefined) backendData.ambient_temp_c = data.ambient_temp_c;
-    if (data.max_inlet_temp_c !== undefined) backendData.max_inlet_temp_c = data.max_inlet_temp_c;
-    if (data.airflow_cfm !== undefined) backendData.airflow_cfm = data.airflow_cfm;
+    // Transform width_inches to backend format (only transformation needed)
+    const backendData: any = { ...data };
+    if (data.width_inches !== undefined) {
+      backendData.width_inches = `${data.width_inches}"`;
+    }
 
     const response = await this.client.put(`/racks/${id}`, backendData);
     return this.transformRack(response.data);
@@ -308,15 +285,24 @@ class API {
   // ==================== Device Specs ====================
 
   async getDeviceSpecs(
-    manufacturer?: string,
+    brand?: string,
     deviceType?: string
   ): Promise<DeviceSpec[]> {
     const params: any = {};
-    if (manufacturer) params.manufacturer = manufacturer;
+    if (brand) params.brand = brand;
     if (deviceType) params.device_type = deviceType;
 
     const response = await this.client.get('/device-specs/', { params });
-    return response.data;
+    // Add inferred device_type and frontend-compatible field aliases
+    // TODO: Backend should provide device_type field
+    return response.data.map((spec: any) => ({
+      ...spec,
+      device_type: this.inferDeviceType(spec.brand, spec.model),
+      // Frontend-compatible aliases
+      manufacturer: spec.brand,
+      height_units: spec.height_u,
+      power_consumption_watts: spec.power_watts,
+    }));
   }
 
   async getDeviceSpec(id: number): Promise<DeviceSpec> {

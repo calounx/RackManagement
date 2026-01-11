@@ -9,12 +9,13 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, leftIcon, rightIcon, type = 'text', ...props }, ref) => {
+  ({ className, label, error, leftIcon, rightIcon, type = 'text', required, ...props }, ref) => {
     return (
       <div className="w-full">
         {label && (
           <label className="block text-sm font-medium text-foreground mb-2">
             {label}
+            {required && <span className="text-red-500 ml-1">*</span>}
           </label>
         )}
         <div className="relative">
@@ -26,6 +27,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             type={type}
             ref={ref}
+            required={required}
             className={cn(
               'w-full rounded-md border bg-input px-4 py-2.5',
               'text-foreground placeholder:text-muted-foreground',

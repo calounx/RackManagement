@@ -146,7 +146,7 @@ export const Racks: React.FC = () => {
                 {racks.map((rack) => {
                   const rackDevices = devices.filter((d) => d.rack_id === rack.id && d.start_unit !== null);
                   const usedUnits = rackDevices.reduce((sum, d) => sum + d.height_units, 0);
-                  const utilization = Math.round((usedUnits / rack.units) * 100);
+                  const utilization = Math.round((usedUnits / rack.total_height_u) * 100);
                   const isSelected = currentRack?.id === rack.id;
 
                   return (

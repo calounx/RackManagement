@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Input, TextArea, Select } from '../ui/input';
+import { Input, TextArea } from '../ui/input';
 import { Combobox } from '../ui/combobox';
 import { Collapsible } from '../ui/collapsible';
 import { useStore } from '../../store/useStore';
-import type { Device, DeviceType, DeviceSpec } from '../../types';
+import type { Device, DeviceType } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search,
   CheckCircle2,
-  Loader2,
-  ExternalLink,
+  
   Database,
   Info,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 
 interface DeviceDialogProps {
@@ -24,16 +24,16 @@ interface DeviceDialogProps {
   mode: 'create' | 'edit';
 }
 
-const DEVICE_TYPES: Array<{ value: DeviceType; label: string }> = [
-  { value: 'server', label: 'Server' },
-  { value: 'switch', label: 'Switch' },
-  { value: 'router', label: 'Router' },
-  { value: 'firewall', label: 'Firewall' },
-  { value: 'storage', label: 'Storage' },
-  { value: 'pdu', label: 'PDU (Power Distribution Unit)' },
-  { value: 'ups', label: 'UPS (Uninterruptible Power Supply)' },
-  { value: 'patch_panel', label: 'Patch Panel' },
-  { value: 'other', label: 'Other' },
+const DEVICE_TYPES: Array<{ value: DeviceType; label: string; icon: string }> = [
+  { value: 'server', label: 'Server', icon: '🖥️' },
+  { value: 'switch', label: 'Switch', icon: '🔀' },
+  { value: 'router', label: 'Router', icon: '📡' },
+  { value: 'firewall', label: 'Firewall', icon: '🛡️' },
+  { value: 'storage', label: 'Storage', icon: '💾' },
+  { value: 'pdu', label: 'PDU (Power Distribution Unit)', icon: '⚡' },
+  { value: 'ups', label: 'UPS (Uninterruptible Power Supply)', icon: '🔋' },
+  { value: 'patch_panel', label: 'Patch Panel', icon: '🔌' },
+  { value: 'other', label: 'Other', icon: '📦' },
 ];
 
 export const DeviceDialog: React.FC<DeviceDialogProps> = ({
@@ -43,7 +43,7 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
   device,
   mode,
 }) => {
-  const { deviceSpecs, fetchDeviceSpecs, fetchSpecsFromUrl } = useStore();
+  const { deviceSpecs, fetchDeviceSpecs, createDeviceSpec, fetchSpecsFromUrl } = useStore();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -54,17 +54,12 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
     height_units: 1,
     power_consumption_watts: 0,
     weight_kg: 0,
-    depth_mm: null as number | null,
-    max_temperature_celsius: null as number | null,
     notes: '',
-    datasheet_url: null as string | null,
   });
 
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResult, setSearchResult] = useState<'found' | 'not-found' | null>(null);
-  const [existingSpec, setExistingSpec] = useState<DeviceSpec | null>(null);
-  const [autoPopulatedFields, setAutoPopulatedFields] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [willCreateNewSpec, setWillCreateNewSpec] = useState(false);
+  const [isFetchingFromWeb, setIsFetchingFromWeb] = useState(false);
 
   // Fetch device specs on mount
   useEffect(() => {
@@ -84,10 +79,7 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
         height_units: device.height_units || 1,
         power_consumption_watts: device.power_consumption_watts || 0,
         weight_kg: device.weight_kg || 0,
-        depth_mm: null,
-        max_temperature_celsius: device.temperature_celsius || null,
         notes: device.notes || '',
-        datasheet_url: null,
       });
     } else {
       resetForm();
@@ -103,146 +95,113 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
       height_units: 1,
       power_consumption_watts: 0,
       weight_kg: 0,
-      depth_mm: null,
-      max_temperature_celsius: null,
       notes: '',
-      datasheet_url: null,
     });
     setErrors({});
-    setSearchResult(null);
-    setExistingSpec(null);
-    setAutoPopulatedFields(new Set());
+    // setExistingSpec(null);
+    setWillCreateNewSpec(false);
+    setIsFetchingFromWeb(false);
   };
 
-  // Get unique brands from existing specs
+  const handleFetchFromWeb = async () => {
+    if (!formData.manufacturer || !formData.model) {
+      setErrors({
+        manufacturer: !formData.manufacturer ? 'Brand is required' : '',
+        model: !formData.model ? 'Model is required' : '',
+      });
+      return;
+    }
+
+    setIsFetchingFromWeb(true);
+    setErrors({});
+
+    try {
+      const fetchedSpec = await fetchSpecsFromUrl(formData.manufacturer, formData.model);
+
+      if (fetchedSpec) {
+        // Auto-populate form with fetched data
+        setFormData(prev => ({
+          ...prev,
+          height_units: fetchedSpec.height_u,
+          power_consumption_watts: fetchedSpec.power_watts,
+          weight_kg: fetchedSpec.weight_kg,
+        }));
+
+        // Refresh device specs list
+        await fetchDeviceSpecs();
+
+        setErrors({ manufacturer: '' });
+      } else {
+        setErrors({ manufacturer: 'Could not fetch specifications from web. Please enter manually.' });
+      }
+    } catch (error) {
+      console.error('Failed to fetch from web:', error);
+      setErrors({ manufacturer: 'Failed to fetch from web. Please enter specifications manually.' });
+    } finally {
+      setIsFetchingFromWeb(false);
+    }
+  };
+
+  // Get unique brands filtered by device type
   const availableBrands = useMemo(() => {
-    const brands = Array.from(new Set(deviceSpecs.map((s) => s.manufacturer))).sort();
-    return brands.map((brand) => ({ value: brand, label: brand }));
-  }, [deviceSpecs]);
+    if (!formData.device_type) return [];
+    const brands = deviceSpecs
+      .filter(s => s.device_type === formData.device_type)
+      .map(s => s.brand);
+    return Array.from(new Set(brands)).sort().map(brand => ({ value: brand, label: brand }));
+  }, [deviceSpecs, formData.device_type]);
 
-  // Get models for selected brand
+  // Get models for selected brand and device type
   const availableModels = useMemo(() => {
-    if (!formData.manufacturer) return [];
+    if (!formData.manufacturer || !formData.device_type) return [];
     const models = deviceSpecs
-      .filter((s) => s.manufacturer.toLowerCase() === formData.manufacturer.toLowerCase())
-      .map((s) => s.model)
+      .filter(
+        s =>
+          s.brand.toLowerCase() === formData.manufacturer.toLowerCase() &&
+          s.device_type === formData.device_type
+      )
+      .map(s => s.model)
       .sort();
-    return Array.from(new Set(models)).map((model) => ({ value: model, label: model }));
-  }, [deviceSpecs, formData.manufacturer]);
+    return Array.from(new Set(models)).map(model => ({ value: model, label: model }));
+  }, [deviceSpecs, formData.manufacturer, formData.device_type]);
 
-  // Check if brand+model matches existing spec
+  // Check if brand+model+type matches existing spec
   const matchingSpec = useMemo(() => {
-    if (!formData.manufacturer || !formData.model) return null;
+    if (!formData.manufacturer || !formData.model || !formData.device_type) return null;
     return deviceSpecs.find(
-      (s) =>
-        s.manufacturer.toLowerCase() === formData.manufacturer.toLowerCase() &&
-        s.model.toLowerCase() === formData.model.toLowerCase()
+      s =>
+        s.brand.toLowerCase() === formData.manufacturer.toLowerCase() &&
+        s.model.toLowerCase() === formData.model.toLowerCase() &&
+        s.device_type === formData.device_type
     );
-  }, [deviceSpecs, formData.manufacturer, formData.model]);
+  }, [deviceSpecs, formData.manufacturer, formData.model, formData.device_type]);
 
   // Auto-populate from matching spec
   useEffect(() => {
     if (matchingSpec && mode === 'create') {
-      setExistingSpec(matchingSpec);
-      const newAutoPopulated = new Set<string>();
-
-      setFormData((prev) => {
-        const updated = { ...prev };
-
-        // Only auto-populate if fields haven't been manually changed
-        if (prev.height_units === 1) {
-          updated.height_units = matchingSpec.height_units;
-          newAutoPopulated.add('height_units');
-        }
-        if (prev.power_consumption_watts === 0) {
-          updated.power_consumption_watts = matchingSpec.power_consumption_watts;
-          newAutoPopulated.add('power_consumption_watts');
-        }
-        if (prev.weight_kg === 0) {
-          updated.weight_kg = matchingSpec.weight_kg;
-          newAutoPopulated.add('weight_kg');
-        }
-        if (matchingSpec.max_temperature_celsius && !prev.max_temperature_celsius) {
-          updated.max_temperature_celsius = matchingSpec.max_temperature_celsius;
-          newAutoPopulated.add('max_temperature_celsius');
-        }
-        if (matchingSpec.dimensions_mm && !prev.depth_mm) {
-          const depthMatch = matchingSpec.dimensions_mm.match(/(\d+\.?\d*)/);
-          if (depthMatch) {
-            updated.depth_mm = parseFloat(depthMatch[1]);
-            newAutoPopulated.add('depth_mm');
-          }
-        }
-        if (matchingSpec.datasheet_url && !prev.datasheet_url) {
-          updated.datasheet_url = matchingSpec.datasheet_url;
-          newAutoPopulated.add('datasheet_url');
-        }
-
-        return updated;
-      });
-
-      setAutoPopulatedFields(newAutoPopulated);
-      setSearchResult('found');
-    } else if (!matchingSpec && existingSpec) {
-      setExistingSpec(null);
-      setSearchResult(null);
-      setAutoPopulatedFields(new Set());
+      // setExistingSpec(matchingSpec);
+      setWillCreateNewSpec(false);
+      setFormData(prev => ({
+        ...prev,
+        height_units: matchingSpec.height_u,
+        power_consumption_watts: matchingSpec.power_watts,
+        weight_kg: matchingSpec.weight_kg,
+      }));
+    } else if (!matchingSpec && formData.manufacturer && formData.model) {
+      // setExistingSpec(null);
+      setWillCreateNewSpec(true);
+    } else {
+      // setExistingSpec(null);
+      setWillCreateNewSpec(false);
     }
-  }, [matchingSpec, mode, existingSpec]);
-
-  // Search manufacturer database
-  const handleSearchManufacturer = async () => {
-    if (!formData.manufacturer || !formData.model) {
-      setErrors({ ...errors, search: 'Please enter both manufacturer and model' });
-      return;
-    }
-
-    setIsSearching(true);
-    setSearchResult(null);
-    setErrors({});
-
-    try {
-      const spec = await fetchSpecsFromUrl(formData.manufacturer, formData.model);
-      if (spec) {
-        setSearchResult('found');
-        setExistingSpec(spec);
-        const newAutoPopulated = new Set<string>([
-          'height_units',
-          'power_consumption_watts',
-          'weight_kg',
-        ]);
-
-        // Auto-populate all fields from spec
-        setFormData((prev) => ({
-          ...prev,
-          height_units: spec.height_units,
-          power_consumption_watts: spec.power_consumption_watts,
-          weight_kg: spec.weight_kg,
-          max_temperature_celsius: spec.max_temperature_celsius || prev.max_temperature_celsius,
-          datasheet_url: spec.datasheet_url || prev.datasheet_url,
-          depth_mm: spec.dimensions_mm
-            ? parseFloat(spec.dimensions_mm.match(/(\d+\.?\d*)/)![1])
-            : prev.depth_mm,
-        }));
-
-        if (spec.max_temperature_celsius) newAutoPopulated.add('max_temperature_celsius');
-        if (spec.datasheet_url) newAutoPopulated.add('datasheet_url');
-        if (spec.dimensions_mm) newAutoPopulated.add('depth_mm');
-
-        setAutoPopulatedFields(newAutoPopulated);
-      } else {
-        setSearchResult('not-found');
-      }
-    } catch (error) {
-      setSearchResult('not-found');
-    } finally {
-      setIsSearching(false);
-    }
-  };
+  }, [matchingSpec, mode, formData.manufacturer, formData.model]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    if (!formData.device_type) {
+      newErrors.device_type = 'Device type is required';
+    }
     if (!formData.manufacturer.trim()) {
       newErrors.manufacturer = 'Manufacturer is required';
     }
@@ -263,46 +222,66 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
       return;
     }
 
-    // If matching existing spec, use specification_id
-    if (matchingSpec && mode === 'create') {
-      onSave({
-        specification_id: matchingSpec.id,
-        custom_name: formData.custom_name || undefined,
-        access_frequency: 'medium',
-        notes: formData.notes || undefined,
-      });
-    } else {
-      // Create new device with manual specs
-      onSave({
-        name: formData.custom_name || `${formData.manufacturer} ${formData.model}`,
-        manufacturer: formData.manufacturer,
-        model: formData.model,
-        device_type: formData.device_type,
-        height_units: formData.height_units,
-        power_consumption_watts: formData.power_consumption_watts,
-        weight_kg: formData.weight_kg,
-        temperature_celsius: formData.max_temperature_celsius || undefined,
-        notes: formData.notes || undefined,
-      });
-    }
+    try {
+      let specId = matchingSpec?.id;
 
-    onClose();
-    resetForm();
+      // If no matching spec exists, create a new one
+      if (!matchingSpec) {
+        const newSpec = await createDeviceSpec({
+          brand: formData.manufacturer,
+          model: formData.model,
+          variant: null,
+          height_u: formData.height_units,
+          width_type: '19"',
+          depth_mm: 450,
+          weight_kg: formData.weight_kg,
+          power_watts: formData.power_consumption_watts,
+          heat_output_btu: Math.round(formData.power_consumption_watts * 3.41),
+          airflow_pattern: 'front_to_back',
+          max_operating_temp_c: 45,
+          typical_ports: null,
+          mounting_type: '4-post',
+          source: 'user_custom',
+          source_url: null,
+          confidence: 'medium',
+          fetched_at: null,
+          last_updated: new Date().toISOString(),
+          device_type: formData.device_type,
+        });
+
+        if (!newSpec) {
+          throw new Error('Failed to create device specification');
+        }
+
+        specId = newSpec.id;
+
+        // Refresh device specs list
+        await fetchDeviceSpecs();
+      }
+
+      const submitData: any = {
+        specification_id: specId,
+        custom_name: formData.custom_name || undefined,
+        notes: formData.notes || undefined,
+      };
+
+      await onSave(submitData);
+      onClose();
+      resetForm();
+    } catch (error) {
+      console.error('Failed to create device:', error);
+      setErrors({ manufacturer: 'Failed to create device. Please try again.' });
+    }
   };
 
-  const canSearch =
-    formData.manufacturer &&
-    formData.model &&
-    !isSearching &&
-    !matchingSpec &&
-    mode === 'create';
+  const selectedDeviceTypeInfo = DEVICE_TYPES.find(dt => dt.value === formData.device_type);
 
   return (
     <Dialog
@@ -312,26 +291,54 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
       size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Section 1: Device Identity */}
+        {/* Step 1: Device Type */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground pb-2 border-b border-border">
-            <Database className="w-4 h-4 text-electric" />
-            Device Identity
+            <div className="text-lg">{selectedDeviceTypeInfo?.icon || '📦'}</div>
+            <span>Step 1: Select Device Type</span>
           </div>
 
-          {/* Device Type */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
               Device Type <span className="text-red-500">*</span>
             </label>
-            <Select
-              value={formData.device_type}
-              onChange={(e) =>
-                setFormData({ ...formData, device_type: e.target.value as DeviceType })
-              }
-              options={DEVICE_TYPES}
-              disabled={mode === 'edit'}
-            />
+            <div className="grid grid-cols-3 gap-2">
+              {DEVICE_TYPES.map(type => (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      device_type: type.value,
+                      manufacturer: '',
+                      model: '',
+                    });
+                    setErrors({ ...errors, device_type: '' });
+                  }}
+                  disabled={mode === 'edit'}
+                  className={`p-3 rounded-lg border-2 transition-all text-left ${
+                    formData.device_type === type.value
+                      ? 'border-electric bg-electric/10 text-electric'
+                      : 'border-border hover:border-electric/50 text-muted-foreground hover:text-foreground'
+                  } ${mode === 'edit' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="text-xl mb-1">{type.icon}</div>
+                  <div className="text-xs font-medium">{type.label.split('(')[0].trim()}</div>
+                </button>
+              ))}
+            </div>
+            {errors.device_type && (
+              <p className="text-xs text-red-500 mt-1">{errors.device_type}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Step 2 & 3: Brand and Model */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground pb-2 border-b border-border">
+            <Database className="w-4 h-4 text-electric" />
+            <span>Step 2: Identify Device</span>
           </div>
 
           {/* Manufacturer */}
@@ -341,16 +348,21 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
             </label>
             <Combobox
               value={formData.manufacturer}
-              onChange={(value) => {
-                setFormData({ ...formData, manufacturer: value });
+              onChange={value => {
+                setFormData({ ...formData, manufacturer: value, model: '' });
                 setErrors({ ...errors, manufacturer: '' });
               }}
               options={availableBrands}
-              placeholder="e.g., Cisco, Dell, HPE, Ubiquiti"
+              placeholder="Type to search or enter new brand (e.g., Cisco, Dell, HPE)"
               error={errors.manufacturer}
               allowCustom={true}
               disabled={mode === 'edit'}
             />
+            {availableBrands.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {availableBrands.length} {formData.device_type} brand(s) in database
+              </p>
+            )}
           </div>
 
           {/* Model */}
@@ -360,20 +372,49 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
             </label>
             <Combobox
               value={formData.model}
-              onChange={(value) => {
+              onChange={value => {
                 setFormData({ ...formData, model: value });
                 setErrors({ ...errors, model: '' });
               }}
               options={availableModels}
-              placeholder="e.g., Catalyst 2960, PowerEdge R740"
+              placeholder="Type model name (e.g., Catalyst 2960, PowerEdge R740)"
               error={errors.model}
               allowCustom={true}
-              disabled={mode === 'edit'}
+              disabled={mode === 'edit' || !formData.manufacturer}
             />
+            {availableModels.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {availableModels.length} {formData.manufacturer} model(s) available
+              </p>
+            )}
+
+            {/* Fetch from Web Button */}
+            {formData.manufacturer && formData.model && !matchingSpec && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleFetchFromWeb}
+                disabled={isFetchingFromWeb}
+                className="mt-2 w-full gap-2"
+              >
+                {isFetchingFromWeb ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-electric" />
+                    Fetching specifications...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Fetch Specs from Web
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
-          {/* Auto-Search Integration */}
-          {mode === 'create' && (
+          {/* Spec Detection Status */}
+          {mode === 'create' && formData.manufacturer && formData.model && (
             <AnimatePresence mode="wait">
               {matchingSpec ? (
                 <motion.div
@@ -390,20 +431,20 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
                         Specifications Found in Database
                       </p>
                       <p className="text-xs text-muted-foreground mb-3">
-                        Using existing specifications for {matchingSpec.manufacturer}{' '}
+                        Using existing specifications for {matchingSpec.brand}{' '}
                         {matchingSpec.model}
                       </p>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="p-2 bg-background/50 rounded">
                           <span className="text-xs text-muted-foreground block">Height</span>
                           <span className="text-sm text-electric font-mono font-bold">
-                            {matchingSpec.height_units}U
+                            {matchingSpec.height_u}U
                           </span>
                         </div>
                         <div className="p-2 bg-background/50 rounded">
                           <span className="text-xs text-muted-foreground block">Power</span>
                           <span className="text-sm text-electric font-mono font-bold">
-                            {matchingSpec.power_consumption_watts}W
+                            {matchingSpec.power_watts}W
                           </span>
                         </div>
                         <div className="p-2 bg-background/50 rounded">
@@ -416,56 +457,39 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
                     </div>
                   </div>
                 </motion.div>
-              ) : canSearch ? (
+              ) : willCreateNewSpec ? (
                 <motion.div
-                  key="search-button"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
+                  key="will-create-new"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg"
                 >
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSearchManufacturer}
-                    disabled={isSearching}
-                    className="w-full border-electric/30 hover:bg-electric/5 hover:border-electric"
-                  >
-                    {isSearching ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        Searching Manufacturer Database...
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4 mr-2" />
-                        Search Manufacturer Database for Specs
-                      </>
-                    )}
-                  </Button>
-
-                  {searchResult === 'not-found' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="mt-3 p-3 bg-muted/30 border border-border rounded-lg flex items-start gap-2"
-                    >
-                      <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">
-                        No specifications found in manufacturer database. Please enter
-                        specifications manually below.
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-yellow-500 mb-1">
+                        New Device Specification
                       </p>
-                    </motion.div>
-                  )}
+                      <p className="text-xs text-muted-foreground">
+                        This brand/model combination is not in the database. Please enter the
+                        specifications below and we'll save them for future use.
+                      </p>
+                    </div>
+                  </div>
                 </motion.div>
               ) : null}
             </AnimatePresence>
           )}
         </div>
 
-        {/* Section 2: Specifications */}
-        <Collapsible title="Physical Specifications" defaultOpen={true}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
+        {/* Step 4: Physical Specifications */}
+        {formData.manufacturer && formData.model && (
+          <Collapsible
+            title="Step 3: Physical Specifications"
+            defaultOpen={true}
+          >
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Height (U) <span className="text-red-500">*</span>
@@ -475,27 +499,21 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
                   min="1"
                   max="48"
                   value={formData.height_units}
-                  onChange={(e) => {
+                  onChange={e => {
                     setFormData({ ...formData, height_units: parseInt(e.target.value) || 1 });
                     setErrors({ ...errors, height_units: '' });
-                    setAutoPopulatedFields((prev) => {
-                      const next = new Set(prev);
-                      next.delete('height_units');
-                      return next;
-                    });
                   }}
                   error={errors.height_units}
+                  disabled={!!matchingSpec}
                 />
+                {matchingSpec && (
+                  <p className="text-xs text-electric mt-1 flex items-center gap-1">
+                    <Database className="w-3 h-3" />
+                    from database
+                  </p>
+                )}
               </div>
-              {autoPopulatedFields.has('height_units') && (
-                <p className="text-xs text-electric mt-1 flex items-center gap-1">
-                  <Database className="w-3 h-3" />
-                  from database
-                </p>
-              )}
-            </div>
 
-            <div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Power (W) <span className="text-red-500">*</span>
@@ -504,30 +522,24 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
                   type="number"
                   min="0"
                   value={formData.power_consumption_watts}
-                  onChange={(e) => {
+                  onChange={e => {
                     setFormData({
                       ...formData,
                       power_consumption_watts: parseInt(e.target.value) || 0,
                     });
                     setErrors({ ...errors, power_consumption_watts: '' });
-                    setAutoPopulatedFields((prev) => {
-                      const next = new Set(prev);
-                      next.delete('power_consumption_watts');
-                      return next;
-                    });
                   }}
                   error={errors.power_consumption_watts}
+                  disabled={!!matchingSpec}
                 />
+                {matchingSpec && (
+                  <p className="text-xs text-electric mt-1 flex items-center gap-1">
+                    <Database className="w-3 h-3" />
+                    from database
+                  </p>
+                )}
               </div>
-              {autoPopulatedFields.has('power_consumption_watts') && (
-                <p className="text-xs text-electric mt-1 flex items-center gap-1">
-                  <Database className="w-3 h-3" />
-                  from database
-                </p>
-              )}
-            </div>
 
-            <div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Weight (kg) <span className="text-red-500">*</span>
@@ -537,130 +549,69 @@ export const DeviceDialog: React.FC<DeviceDialogProps> = ({
                   min="0"
                   step="0.1"
                   value={formData.weight_kg}
-                  onChange={(e) => {
+                  onChange={e => {
                     setFormData({ ...formData, weight_kg: parseFloat(e.target.value) || 0 });
                     setErrors({ ...errors, weight_kg: '' });
-                    setAutoPopulatedFields((prev) => {
-                      const next = new Set(prev);
-                      next.delete('weight_kg');
-                      return next;
-                    });
                   }}
                   error={errors.weight_kg}
+                  disabled={!!matchingSpec}
                 />
+                {matchingSpec && (
+                  <p className="text-xs text-electric mt-1 flex items-center gap-1">
+                    <Database className="w-3 h-3" />
+                    from database
+                  </p>
+                )}
               </div>
-              {autoPopulatedFields.has('weight_kg') && (
-                <p className="text-xs text-electric mt-1 flex items-center gap-1">
-                  <Database className="w-3 h-3" />
-                  from database
+            </div>
+
+            {willCreateNewSpec && (
+              <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  These specifications will be saved to the database and can be reused when adding
+                  more devices of the same model.
                 </p>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
+          </Collapsible>
+        )}
 
-          <Input
-            label="Depth (mm)"
-            type="number"
-            min="0"
-            value={formData.depth_mm || ''}
-            onChange={(e) => {
-              setFormData({
-                ...formData,
-                depth_mm: e.target.value ? parseFloat(e.target.value) : null,
-              });
-              setAutoPopulatedFields((prev) => {
-                const next = new Set(prev);
-                next.delete('depth_mm');
-                return next;
-              });
-            }}
-            placeholder="Optional"
-          />
-          {autoPopulatedFields.has('depth_mm') && (
-            <p className="text-xs text-electric -mt-2 flex items-center gap-1">
-              <Database className="w-3 h-3" />
-              from database
-            </p>
-          )}
-        </Collapsible>
+        {/* Step 5: Additional Information */}
+        {formData.manufacturer && formData.model && (
+          <Collapsible title="Step 4: Additional Information (Optional)">
+            <Input
+              label="Custom Name"
+              value={formData.custom_name}
+              onChange={e => setFormData({ ...formData, custom_name: e.target.value })}
+              placeholder={`Defaults to "${formData.manufacturer} ${formData.model}"`}
+            />
 
-        {/* Operating Specs (Optional) */}
-        <Collapsible title="Operating Specifications (Optional)">
-          <Input
-            label="Max Temperature (°C)"
-            type="number"
-            value={formData.max_temperature_celsius || ''}
-            onChange={(e) => {
-              setFormData({
-                ...formData,
-                max_temperature_celsius: e.target.value ? parseFloat(e.target.value) : null,
-              });
-              setAutoPopulatedFields((prev) => {
-                const next = new Set(prev);
-                next.delete('max_temperature_celsius');
-                return next;
-              });
-            }}
-            placeholder="e.g., 35"
-          />
-          {autoPopulatedFields.has('max_temperature_celsius') && (
-            <p className="text-xs text-electric -mt-2 flex items-center gap-1">
-              <Database className="w-3 h-3" />
-              from database
-            </p>
-          )}
+            <TextArea
+              label="Notes"
+              value={formData.notes}
+              onChange={e => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Additional notes about this device..."
+              rows={3}
+            />
+          </Collapsible>
+        )}
 
-          <div className="p-3 bg-muted/30 rounded-lg border border-border">
-            <p className="text-xs text-muted-foreground">
-              Additional port configurations can be added after device creation.
-            </p>
-          </div>
-        </Collapsible>
-
-        {/* Additional Information */}
-        <Collapsible title="Additional Information (Optional)">
-          <Input
-            label="Custom Name"
-            value={formData.custom_name}
-            onChange={(e) => setFormData({ ...formData, custom_name: e.target.value })}
-            placeholder={`e.g., Core Switch 1 (defaults to "${formData.manufacturer} ${formData.model}")`}
-          />
-
-          <TextArea
-            label="Notes"
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            placeholder="Additional notes about this device..."
-            rows={3}
-          />
-        </Collapsible>
-
-        {/* Documentation (Optional) */}
-        {formData.datasheet_url && (
-          <Collapsible title="Documentation">
-            <div className="p-4 bg-secondary/30 rounded-lg border border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-1">Datasheet</p>
-                  {autoPopulatedFields.has('datasheet_url') && (
-                    <p className="text-xs text-electric flex items-center gap-1 mb-2">
-                      <Database className="w-3 h-3" />
-                      from database
-                    </p>
-                  )}
-                </div>
-                <a
-                  href={formData.datasheet_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-electric hover:text-electric/80 transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View Datasheet
-                </a>
+        {/* Validation Summary */}
+        {Object.keys(errors).length > 0 && (
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-red-500 mb-1">Please fix the following errors:</p>
+                <ul className="text-xs text-muted-foreground list-disc list-inside">
+                  {Object.values(errors).map((error, idx) => (
+                    <li key={idx}>{error}</li>
+                  ))}
+                </ul>
               </div>
             </div>
-          </Collapsible>
+          </div>
         )}
 
         <DialogFooter>
