@@ -43,12 +43,15 @@ homerack.db
 *~
 .DS_Store
 
-# Environment
+# Environment (NEVER commit secrets)
 .env
 .env.local
 .env.*.local
 .env.production
 .env.staging
+.env.generated
+*.env.generated
+**/.env.generated
 
 # Logs
 *.log
