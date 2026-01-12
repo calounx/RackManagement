@@ -158,6 +158,7 @@ class Device(Base):
     # User-defined properties
     access_frequency = Column(Enum(AccessFrequency), default=AccessFrequency.MEDIUM)
     notes = Column(String, nullable=True)
+    serial_number = Column(String, nullable=True)
 
     # Relationships
     specification = relationship("DeviceSpecification", back_populates="devices")
@@ -383,7 +384,7 @@ class User(Base):
     full_name = Column(String(255), nullable=True)
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

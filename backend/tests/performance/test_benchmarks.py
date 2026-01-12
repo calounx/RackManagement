@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models import (
     Rack, Device, DeviceSpecification, RackPosition, Connection,
-    WidthType, AirflowPattern, Brand, DeviceCategory
+    WidthType, AirflowPattern, Brand
 )
 from app.api.racks import (
     get_occupied_positions,
@@ -102,9 +102,8 @@ def sample_rack(db_session: Session) -> Rack:
 def sample_device_spec(db_session: Session, sample_brand: Brand) -> DeviceSpecification:
     """Create a sample device specification."""
     spec = DeviceSpecification(
-        brand_id=sample_brand.id,
+        brand=sample_brand.name,
         model="Catalyst 9300",
-        category=DeviceCategory.SWITCH,
         height_u=1,
         width_type=WidthType.NINETEEN_INCH,
         depth_mm=400,
@@ -173,9 +172,8 @@ class TestDatabasePerformance:
         # Create multiple device specs
         for i in range(20):
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Model {i}",
-                category=DeviceCategory.SWITCH,
                 height_u=1,
                 width_type=WidthType.NINETEEN_INCH
             )
@@ -185,7 +183,7 @@ class TestDatabasePerformance:
         start = time.time()
 
         specs = db_session.query(DeviceSpecification).filter(
-            DeviceSpecification.brand_id == sample_brand.id
+            DeviceSpecification.brand == sample_brand.name
         ).all()
 
         elapsed = (time.time() - start) * 1000
@@ -349,9 +347,8 @@ class TestThermalAnalysisPerformance:
             power = 500 if i % 3 == 0 else 100  # Every 3rd device is high power
 
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Device {i}",
-                category=DeviceCategory.SERVER,
                 height_u=2,
                 power_watts=power,
                 width_type=WidthType.NINETEEN_INCH
@@ -391,9 +388,8 @@ class TestThermalAnalysisPerformance:
 
         for i, pattern in enumerate(patterns * 3):  # 12 devices total
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Device {i}",
-                category=DeviceCategory.SWITCH,
                 height_u=1,
                 airflow_pattern=pattern,
                 width_type=WidthType.NINETEEN_INCH
@@ -470,9 +466,8 @@ class TestMemoryUsage:
         specs = []
         for i in range(100):
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Model {i}",
-                category=DeviceCategory.SWITCH,
                 height_u=1,
                 width_type=WidthType.NINETEEN_INCH
             )
@@ -568,9 +563,8 @@ class TestLargeDatasetPerformance:
         # Create 100 device specifications with similar names
         for i in range(100):
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Catalyst {i}",
-                category=DeviceCategory.SWITCH,
                 height_u=1,
                 width_type=WidthType.NINETEEN_INCH
             )
@@ -595,9 +589,8 @@ class TestLargeDatasetPerformance:
         # Create 21 x 2U devices (filling 42U rack)
         for i in range(21):
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Server {i}",
-                category=DeviceCategory.SERVER,
                 height_u=2,
                 power_watts=300,
                 width_type=WidthType.NINETEEN_INCH,
@@ -652,9 +645,8 @@ class TestOptimizationPerformance:
         devices = []
         for i in range(5):
             spec = DeviceSpecification(
-                brand_id=sample_brand.id,
+                brand=sample_brand.name,
                 model=f"Device {i}",
-                category=DeviceCategory.SWITCH,
                 height_u=1,
                 power_watts=150,
                 width_type=WidthType.NINETEEN_INCH

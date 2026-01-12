@@ -18,11 +18,11 @@ test.describe('Page Navigation', () => {
     // Check for welcome header (use more specific selector)
     await expect(page.getByRole('heading', { name: /Welcome to.*HomeRack/i })).toBeVisible();
 
-    // Check for stats cards
-    await expect(page.locator('text=Total Racks')).toBeVisible();
-    await expect(page.locator('text=Total Devices')).toBeVisible();
-    await expect(page.locator('text=Active Devices')).toBeVisible();
-    await expect(page.locator('text=Connections')).toBeVisible();
+    // Check for stats cards - use first() to avoid multiple matches
+    await expect(page.locator('text=Total Racks').first()).toBeVisible();
+    await expect(page.locator('text=Total Devices').first()).toBeVisible();
+    await expect(page.locator('text=Active Devices').first()).toBeVisible();
+    await expect(page.locator('text=Connections').first()).toBeVisible();
   });
 
   test('should display dashboard statistics', async ({ page }) => {
@@ -30,13 +30,13 @@ test.describe('Page Navigation', () => {
     await page.waitForTimeout(1000);
 
     // Check Power Consumption card
-    await expect(page.locator('text=Power Consumption')).toBeVisible();
+    await expect(page.locator('text=Power Consumption').first()).toBeVisible();
 
     // Check Thermal Overview card
-    await expect(page.locator('text=Thermal Overview')).toBeVisible();
+    await expect(page.locator('text=Thermal Overview').first()).toBeVisible();
 
     // Check Recent Devices card
-    await expect(page.locator('text=Recent Devices')).toBeVisible();
+    await expect(page.locator('text=Recent Devices').first()).toBeVisible();
   });
 
   test('should navigate to Racks page from sidebar', async ({ page }) => {
@@ -113,7 +113,7 @@ test.describe('Page Navigation', () => {
 
   test('should display HomeRack branding in sidebar', async ({ page }) => {
     await expect(page.locator('aside').getByRole('heading', { name: 'HomeRack' })).toBeVisible();
-    await expect(page.locator('aside').locator('text=Precision Engineering')).toBeVisible();
+    await expect(page.locator('aside').locator('text=Precision Engineering').first()).toBeVisible();
   });
 
   test('should navigate back to dashboard from logo', async ({ page }) => {

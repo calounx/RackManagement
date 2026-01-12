@@ -6,7 +6,21 @@ This module provides:
 - FastAPI TestClient configuration
 - Shared fixtures for common test data
 - Database session management
+
+IMPORTANT: Environment variables must be set BEFORE importing any app modules
+to ensure the test database configuration is used instead of production.
 """
+
+import os
+import sys
+
+# Set test environment variables BEFORE any app imports
+# This ensures the database module uses the test configuration
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["ENVIRONMENT"] = "testing"
+os.environ["REQUIRE_AUTH"] = "false"
+os.environ["REDIS_ENABLED"] = "false"
+os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 import pytest
 from typing import Generator
@@ -15,8 +29,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
+# Now safe to import app modules - they will use the test DATABASE_URL
 from app.main import app
-from app.database import Base, get_db
+from app.database import Base
+# Import get_db from BOTH locations to ensure we override the correct one
+from app.database import get_db as database_get_db
+from app.api.dependencies import get_db as dependencies_get_db
 from app.models import (
     DeviceType, Brand, Model, DeviceSpecification,
     Device, Rack, RackPosition, Connection,
@@ -26,17 +44,20 @@ from app.models import (
 
 
 # Use in-memory SQLite for tests (fast and isolated)
+# StaticPool is CRITICAL for in-memory SQLite to ensure all operations
+# use the same underlying database connection
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
-# Create test engine with special config for SQLite
-engine = create_engine(
+# Create test engine with StaticPool
+# This ensures all database operations share the same in-memory database
+test_engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool,  # Ensure same connection for in-memory DB
+    poolclass=StaticPool,
 )
 
-# Create test session factory
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Create test session factory bound to our test engine
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
 @pytest.fixture(scope="function")
@@ -44,21 +65,21 @@ def db_session() -> Generator[Session, None, None]:
     """
     Create a fresh database session for each test.
 
-    Database is created before each test and all tables are dropped after.
-    This ensures complete test isolation.
+    Database tables are created before each test and all tables are dropped after.
+    This ensures complete test isolation - each test starts with a clean database.
     """
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
+    # Create all tables in the test database
+    Base.metadata.create_all(bind=test_engine)
 
-    # Create session
+    # Create a new session for the test
     session = TestingSessionLocal()
 
     try:
         yield session
     finally:
         session.close()
-        # Drop all tables after test
-        Base.metadata.drop_all(bind=engine)
+        # Drop all tables after test to ensure clean state
+        Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture(scope="function")
@@ -66,20 +87,30 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     """
     Create a TestClient with overridden database dependency.
 
-    All API calls made through this client will use the test database.
+    All API calls made through this client will use the test database session,
+    ensuring complete isolation from the production database.
+
+    The key insight is that we yield the SAME db_session that was used to
+    create tables, ensuring all operations happen on the same in-memory database.
     """
     def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
+        """
+        Override the get_db dependency to use test session.
 
-    app.dependency_overrides[get_db] = override_get_db
+        IMPORTANT: We yield the existing db_session rather than creating a new one.
+        This ensures the TestClient uses the same session where tables were created.
+        """
+        yield db_session
+
+    # Override BOTH get_db functions - the one in database.py AND dependencies.py
+    # API endpoints import from dependencies.py, so that's the critical one
+    app.dependency_overrides[database_get_db] = override_get_db
+    app.dependency_overrides[dependencies_get_db] = override_get_db
 
     with TestClient(app) as test_client:
         yield test_client
 
-    # Clean up overrides
+    # Clean up overrides after test
     app.dependency_overrides.clear()
 
 
@@ -93,7 +124,7 @@ def device_type_switch(db_session: Session) -> DeviceType:
     device_type = DeviceType(
         name="Switch",
         slug="switch",
-        icon="🔀",
+        icon="S",
         description="Network switches",
         color="#4CAF50"
     )
@@ -109,7 +140,7 @@ def device_type_server(db_session: Session) -> DeviceType:
     device_type = DeviceType(
         name="Server",
         slug="server",
-        icon="🖥️",
+        icon="V",
         description="Servers",
         color="#2196F3"
     )
@@ -125,7 +156,7 @@ def device_type_firewall(db_session: Session) -> DeviceType:
     device_type = DeviceType(
         name="Firewall",
         slug="firewall",
-        icon="🔥",
+        icon="F",
         description="Firewalls and security appliances",
         color="#FF5722"
     )
