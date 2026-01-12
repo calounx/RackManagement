@@ -195,3 +195,39 @@ class RackCapacityError(HomeRackBaseException):
                 "maximum": max_value
             }
         )
+
+
+class DCIMConnectionError(HomeRackBaseException):
+    """DCIM system connection failures."""
+
+    def __init__(self, message: str = "DCIM connection failed", details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            status_code=503,
+            error_code="DCIM_CONNECTION_ERROR",
+            details=details
+        )
+
+
+class DCIMAuthenticationError(HomeRackBaseException):
+    """DCIM authentication failures."""
+
+    def __init__(self, message: str = "DCIM authentication failed", details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            status_code=401,
+            error_code="DCIM_AUTHENTICATION_ERROR",
+            details=details
+        )
+
+
+class DCIMNotFoundError(HomeRackBaseException):
+    """DCIM resource not found."""
+
+    def __init__(self, message: str = "DCIM resource not found", details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            status_code=404,
+            error_code="DCIM_NOT_FOUND",
+            details=details
+        )

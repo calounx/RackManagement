@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import device_specs, devices, racks, connections, health, device_types, brands, models
+from .api import device_specs, devices, racks, connections, health, device_types, brands, models, dcim, auth
 from .config import settings
 from .middleware.error_handlers import register_exception_handlers
 from .middleware.request_id import RequestIDMiddleware
@@ -48,6 +48,15 @@ upload_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
 # Include API routers
+
+# Authentication (public endpoints)
+app.include_router(
+    auth.router,
+    prefix="/api",
+    tags=["Authentication"]
+)
+
+# Device management
 app.include_router(
     device_specs.router,
     prefix="/api/device-specs",
@@ -90,6 +99,12 @@ app.include_router(
     tags=["Models"]
 )
 
+# DCIM Integration (Phase 4 - NetBox)
+app.include_router(
+    dcim.router,
+    prefix="/api"
+)
+
 @app.get("/")
 async def root():
     """API root endpoint"""
@@ -97,8 +112,10 @@ async def root():
         "name": "HomeRack API",
         "version": "1.0.0",
         "description": "Network rack optimization system",
+        "authentication": "JWT Bearer Token" if settings.REQUIRE_AUTH else "Optional",
         "endpoints": {
             "docs": "/docs",
+            "auth": "/api/auth/login",
             "device_specs": "/api/device-specs",
             "devices": "/api/devices",
             "racks": "/api/racks",
@@ -113,6 +130,7 @@ async def startup_event():
     logger.info(f"Starting {settings.APP_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
+    logger.info(f"Authentication required: {settings.REQUIRE_AUTH}")
     logger.info(f"Circuit breaker enabled: {settings.CIRCUIT_BREAKER_ENABLED}")
     logger.info(f"Rate limiting enabled: {settings.RATE_LIMIT_ENABLED}")
 
@@ -132,5 +150,6 @@ async def health_check():
     return {
         "status": "healthy",
         "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT
+        "environment": settings.ENVIRONMENT,
+        "auth_required": settings.REQUIRE_AUTH
     }

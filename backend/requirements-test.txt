@@ -1,0 +1,20 @@
+# Test dependencies for HomeRack backend
+# Install with: pip install -r requirements-test.txt
+
+# Core testing framework
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+pytest-xdist==3.5.0
+
+# Test utilities
+faker==20.1.0
+factory-boy==3.3.0
+
+# HTTP testing
+httpx==0.26.0
+
+# Already in main requirements.txt but listed for clarity:
+# - fastapi
+# - sqlalchemy
+# - pydantic

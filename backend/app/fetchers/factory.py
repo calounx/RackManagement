@@ -9,6 +9,7 @@ from .base import BaseSpecFetcher
 from .cisco import CiscoFetcher
 from .ubiquiti import UbiquitiFetcher
 from .generic import GenericFetcher
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ class SpecFetcherFactory:
 
     # Manufacturer to fetcher mapping
     _FETCHER_MAP = {
+        # DCIM Systems (prioritized when enabled)
+        "netbox": ("netbox", "NetBoxFetcher"),
+
         # Network Equipment
         "cisco": ("cisco", "CiscoFetcher"),
         "ubiquiti": ("ubiquiti", "UbiquitiFetcher"),
@@ -74,6 +78,7 @@ class SpecFetcherFactory:
     def get_fetcher(self, brand: str) -> BaseSpecFetcher:
         """
         Get the appropriate fetcher for a brand.
+        Prioritizes NetBox if enabled.
 
         Args:
             brand: Device brand/manufacturer name
@@ -81,6 +86,35 @@ class SpecFetcherFactory:
         Returns:
             Manufacturer-specific fetcher or generic fetcher if no match
         """
+        # Prioritize NetBox if enabled
+        if settings.NETBOX_ENABLED and "netbox" not in self._fetchers:
+            try:
+                logger.info("NetBox integration enabled, attempting to use NetBox fetcher")
+                module_name, class_name = self._FETCHER_MAP["netbox"]
+
+                # Load NetBox fetcher class
+                if class_name not in _fetcher_cache:
+                    fetcher_class = _load_fetcher_class(module_name, class_name)
+                    if fetcher_class:
+                        _fetcher_cache[class_name] = fetcher_class
+
+                if class_name in _fetcher_cache:
+                    # Instantiate NetBox fetcher
+                    fetcher_class = _fetcher_cache[class_name]
+                    netbox_fetcher = fetcher_class(
+                        cache_manager=self.cache_manager,
+                        rate_limiter=self.rate_limiter
+                    )
+                    self._fetchers["netbox"] = netbox_fetcher
+                    logger.info("NetBox fetcher initialized and will be prioritized")
+            except Exception as e:
+                logger.warning(f"NetBox fetcher initialization failed: {e}. Falling back to manufacturer fetchers.")
+
+        # If NetBox is available, use it
+        if "netbox" in self._fetchers:
+            logger.info(f"Using NetBox fetcher for brand '{brand}'")
+            return self._fetchers["netbox"]
+
         # Normalize brand name
         brand_key = brand.lower().strip()
 

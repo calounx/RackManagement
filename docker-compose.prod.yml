@@ -1,0 +1,184 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: homerack-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=homerack
+      - POSTGRES_USER=homerack_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_this_password_in_production}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homerack_user -d homerack"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - homerack-network
+    ports:
+      - "5432:5432"  # Expose for backups and external access
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: homerack-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - homerack-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: homerack-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - homerack-uploads:/app/uploads
+    environment:
+      # Application
+      - APP_NAME=HomeRack API
+      - VERSION=1.0.1
+      - DEBUG=false
+      - ENVIRONMENT=production
+
+      # Worker Configuration (Gunicorn)
+      - WORKERS=${WORKERS:-4}
+      - WORKER_TIMEOUT=${WORKER_TIMEOUT:-120}
+      - GRACEFUL_TIMEOUT=${GRACEFUL_TIMEOUT:-30}
+      - MAX_REQUESTS=${MAX_REQUESTS:-10000}
+      - MAX_REQUESTS_JITTER=${MAX_REQUESTS_JITTER:-1000}
+      - WORKER_CONNECTIONS=${WORKER_CONNECTIONS:-1000}
+
+      # Database - PostgreSQL
+      - DB_TYPE=postgresql
+      - DATABASE_URL=postgresql://homerack_user:${POSTGRES_PASSWORD:-change_this_password_in_production}@postgres:5432/homerack
+      - DB_POOL_SIZE=20
+      - DB_MAX_OVERFLOW=10
+      - DB_POOL_TIMEOUT=30
+      - DB_POOL_RECYCLE=3600
+      - DB_POOL_PRE_PING=true
+      - DB_CONNECT_RETRY_MAX_ATTEMPTS=5
+      - DB_CONNECT_RETRY_DELAY=2
+      - DB_ECHO=false
+
+      # Redis
+      - REDIS_ENABLED=true
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_MAX_CONNECTIONS=50
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_SOCKET_CONNECT_TIMEOUT=5
+      - REDIS_HEALTH_CHECK_INTERVAL=30
+
+      # Security & Authentication
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production-use-openssl-rand-hex-32}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-true}
+
+      # CORS - Allow frontend and host access (JSON array format)
+      - CORS_ORIGINS=["http://localhost","http://lampadas.local","http://lampadas.local:8080"]
+
+      # Logging
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+
+      # Rate Limiting (with Redis)
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REDIS_URL=redis://redis:6379/0
+
+      # Caching (with Redis)
+      - CACHE_ENABLED=true
+      - CACHE_REDIS_URL=redis://redis:6379/0
+      - CACHE_TTL_THERMAL=300
+      - CACHE_TTL_OPTIMIZATION=600
+      - CACHE_TTL_SEARCH=3600
+      - CACHE_TTL_DEVICE_SPECS=3600
+      - CACHE_TTL_RACK_LAYOUT=600
+
+      # Circuit Breaker
+      - CIRCUIT_BREAKER_ENABLED=true
+
+      # File Uploads
+      - UPLOAD_DIR=/app/uploads
+      - BRAND_LOGOS_DIR=/app/uploads/brand_logos
+
+      # NetBox Integration (disabled by default)
+      - NETBOX_ENABLED=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s  # Increased to allow for DB connection retries
+    networks:
+      - homerack-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: false  # Need write access for uploads
+    tmpfs:
+      - /tmp:mode=1777,size=100M
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: homerack-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - homerack-network
+
+networks:
+  homerack-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  homerack-uploads:
+    driver: local

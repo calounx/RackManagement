@@ -6,10 +6,11 @@ python-multipart==0.0.6
 # Database
 sqlalchemy==2.0.25
 alembic==1.13.1
+psycopg2-binary==2.9.9  # PostgreSQL driver
 
-# Redis caching
+# Redis caching (hiredis for performance)
 redis==5.0.1
-aioredis==2.0.1
+hiredis==2.3.2
 
 # Data validation
 pydantic==2.5.3
@@ -38,5 +39,14 @@ pybreaker==1.0.1
 # Structured logging
 structlog==24.1.0
 
+# Authentication and Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
 # Utilities
 python-dateutil==2.8.2
+
+# Monitoring and metrics
+psutil==5.9.8
+prometheus-client==0.20.0

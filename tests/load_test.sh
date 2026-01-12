@@ -1,0 +1,349 @@
+#!/bin/bash
+# Light Load Test Script for HomeRack Application
+# Tests concurrent request handling with light load (single worker, SQLite)
+
+set -euo pipefail
+
+# Configuration
+BASE_URL="${BASE_URL:-http://lampadas.local:8080}"
+OUTPUT_DIR="$(dirname "$0")/reports"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+REPORT_FILE="${OUTPUT_DIR}/load_test_report_${TIMESTAMP}.md"
+
+# Color codes
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Create output directory
+mkdir -p "${OUTPUT_DIR}"
+
+# Function to print colored output
+print_color() {
+    color=$1
+    shift
+    echo -e "${color}$*${NC}"
+}
+
+# Function to run concurrent requests
+run_concurrent_test() {
+    name=$1
+    endpoint=$2
+    concurrent=$3
+    method=${4:-GET}
+
+    print_color "$BLUE" "\n==> Test: $name"
+    print_color "$BLUE" "    Endpoint: $endpoint"
+    print_color "$BLUE" "    Concurrent requests: $concurrent"
+
+    temp_dir=$(mktemp -d)
+    start_time=$(date +%s.%N)
+
+    # Launch concurrent requests
+    for i in $(seq 1 $concurrent); do
+        (
+            local response_code=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "${BASE_URL}${endpoint}")
+            local response_time=$(curl -s -o /dev/null -w '%{time_total}' -X "$method" "${BASE_URL}${endpoint}")
+            echo "${response_code},${response_time}" > "${temp_dir}/result_${i}.txt"
+        ) &
+    done
+
+    # Wait for all requests to complete
+    wait
+
+    end_time=$(date +%s.%N)
+    total_time=$(echo "$end_time - $start_time" | bc)
+
+    # Analyze results
+    success_count=0
+    error_count=0
+    total_response_time=0
+
+    for i in $(seq 1 $concurrent); do
+        if [ -f "${temp_dir}/result_${i}.txt" ]; then
+            local result=$(cat "${temp_dir}/result_${i}.txt")
+            local code=$(echo "$result" | cut -d',' -f1)
+            local time=$(echo "$result" | cut -d',' -f2)
+
+            if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+                ((success_count++))
+            else
+                ((error_count++))
+            fi
+
+            total_response_time=$(echo "$total_response_time + $time" | bc)
+        else
+            ((error_count++))
+        fi
+    done
+
+    avg_response_time=0
+    if [ $success_count -gt 0 ]; then
+        avg_response_time=$(echo "scale=3; $total_response_time / $success_count * 1000" | bc)
+    fi
+
+    success_rate=$(echo "scale=1; $success_count * 100 / $concurrent" | bc)
+
+    # Determine status
+    status="PASS"
+    color="$GREEN"
+    if [ $error_count -gt 0 ]; then
+        status="FAIL"
+        color="$RED"
+    fi
+
+    print_color "$color" "    Success: $success_count/$concurrent (${success_rate}%)"
+    print_color "$color" "    Avg Response Time: ${avg_response_time}ms"
+    print_color "$color" "    Total Time: ${total_time}s"
+    print_color "$color" "    Status: $status"
+
+    # Cleanup
+    rm -rf "$temp_dir"
+
+    # Return results
+    echo "$name|$concurrent|$success_count|$error_count|$avg_response_time|$total_time|$status"
+}
+
+# Banner
+print_color "$BLUE" "╔════════════════════════════════════════════════════════════╗"
+print_color "$BLUE" "║            HomeRack Light Load Test Suite                  ║"
+print_color "$BLUE" "║         Target: ${BASE_URL}                  ║"
+print_color "$BLUE" "╚════════════════════════════════════════════════════════════╝"
+
+# Check if server is reachable
+print_color "$BLUE" "\nChecking server availability..."
+if ! curl -s -f "${BASE_URL}/api/racks/" > /dev/null 2>&1; then
+    print_color "$RED" "ERROR: Server not reachable at ${BASE_URL}"
+    exit 1
+fi
+print_color "$GREEN" "Server is reachable!"
+
+# Warning about system limitations
+print_color "$YELLOW" "\n⚠️  IMPORTANT: This is a LIGHT load test"
+print_color "$YELLOW" "    System: Single worker, SQLite database"
+print_color "$YELLOW" "    Purpose: Detect obvious issues, not stress test"
+
+# Run load tests
+print_color "$BLUE" "\n╔════════════════════════════════════════════════════════════╗"
+print_color "$BLUE" "║                    Running Tests                           ║"
+print_color "$BLUE" "╚════════════════════════════════════════════════════════════╝"
+
+# Store results
+declare -a RESULTS
+
+# Test 1: Light concurrent read on list endpoint
+RESULTS+=($(run_concurrent_test "Light concurrent rack list" "/api/racks/" 10 "GET"))
+
+# Test 2: Light concurrent read on detail endpoint
+RESULTS+=($(run_concurrent_test "Light concurrent rack detail" "/api/racks/1" 8 "GET"))
+
+# Test 3: Light concurrent layout fetch
+RESULTS+=($(run_concurrent_test "Light concurrent rack layout" "/api/racks/1/layout" 5 "GET"))
+
+# Test 4: Light concurrent device list
+RESULTS+=($(run_concurrent_test "Light concurrent device list" "/api/devices/" 10 "GET"))
+
+# Test 5: Light concurrent search
+RESULTS+=($(run_concurrent_test "Light concurrent search" "/api/device-specs/search?q=Cisco" 8 "GET"))
+
+# Test 6: Very light concurrent thermal analysis (expensive)
+RESULTS+=($(run_concurrent_test "Very light concurrent thermal analysis" "/api/racks/1/thermal-analysis" 3 "GET"))
+
+# Generate report
+print_color "$BLUE" "\n╔════════════════════════════════════════════════════════════╗"
+print_color "$BLUE" "║              Generating Report                             ║"
+print_color "$BLUE" "╚════════════════════════════════════════════════════════════╝"
+
+cat > "$REPORT_FILE" << EOF
+# HomeRack Light Load Test Report
+
+**Generated:** $(date '+%Y-%m-%d %H:%M:%S')
+**Base URL:** ${BASE_URL}
+
+## System Configuration
+
+- **Deployment:** Single-worker FastAPI (not production-grade)
+- **Database:** SQLite (single-user)
+- **Server:** lampadas.local:8080
+
+## Load Test Philosophy
+
+This is a **LIGHT LOAD TEST**, not a stress test. The purpose is to:
+- Detect obvious concurrency issues
+- Verify the system handles minimal concurrent load
+- Identify race conditions or database locking issues
+
+This is NOT designed to:
+- Test maximum throughput
+- Stress test the system
+- Determine production capacity
+
+## Test Results
+
+| Test | Concurrent Requests | Success | Failed | Avg Response Time (ms) | Total Time (s) | Status |
+|------|---------------------|---------|--------|------------------------|----------------|--------|
+EOF
+
+# Parse results and add to report
+total_requests=0
+total_success=0
+total_failed=0
+
+for result in "${RESULTS[@]}"; do
+    IFS='|' read -r name concurrent success failed avg_time total_time status <<< "$result"
+
+    total_requests=$((total_requests + concurrent))
+    total_success=$((total_success + success))
+    total_failed=$((total_failed + failed))
+
+    emoji=""
+    case "$status" in
+        "PASS") emoji="🟢" ;;
+        "FAIL") emoji="🔴" ;;
+    esac
+
+    echo "| $name | $concurrent | $success | $failed | $avg_time | $total_time | $emoji $status |" >> "$REPORT_FILE"
+done
+
+# Calculate success rate
+# local overall_success_rate=0
+if [ $total_requests -gt 0 ]; then
+    overall_success_rate=$(echo "scale=1; $total_success * 100 / $total_requests" | bc)
+fi
+
+cat >> "$REPORT_FILE" << EOF
+
+## Summary
+
+- **Total Requests:** $total_requests
+- **Successful:** $total_success
+- **Failed:** $total_failed
+- **Success Rate:** ${overall_success_rate}%
+
+## Analysis
+
+### Concurrency Handling
+
+EOF
+
+if [ $total_failed -eq 0 ]; then
+    cat >> "$REPORT_FILE" << EOF
+✅ **All requests succeeded** - The system handled light concurrent load without errors.
+
+EOF
+else
+    cat >> "$REPORT_FILE" << EOF
+⚠️ **Some requests failed** - The system had issues with concurrent requests:
+
+EOF
+    for result in "${RESULTS[@]}"; do
+        IFS='|' read -r name concurrent success failed avg_time total_time status <<< "$result"
+        if [ "$status" = "FAIL" ]; then
+            echo "- **${name}**: ${failed}/${concurrent} requests failed" >> "$REPORT_FILE"
+        fi
+    done
+    echo "" >> "$REPORT_FILE"
+fi
+
+cat >> "$REPORT_FILE" << EOF
+
+### Performance Under Load
+
+The average response times under light concurrent load:
+
+EOF
+
+for result in "${RESULTS[@]}"; do
+    IFS='|' read -r name concurrent success failed avg_time total_time status <<< "$result"
+    echo "- **${name}**: ${avg_time}ms average (${concurrent} concurrent)" >> "$REPORT_FILE"
+done
+
+cat >> "$REPORT_FILE" << EOF
+
+## Common Issues in Single-Worker Systems
+
+When testing single-worker systems with SQLite, common issues include:
+
+1. **Database Locking**: SQLite locks the entire database for writes
+2. **No Parallelism**: Single worker processes requests sequentially
+3. **Connection Pool Exhaustion**: Limited database connections
+4. **Memory Pressure**: All requests share same process memory
+
+## Recommendations
+
+### For Current System (Development)
+
+1. **Monitor database locks**: Check for SQLite locking issues
+2. **Add request queuing**: Implement graceful request queuing
+3. **Cache read-heavy endpoints**: Reduce database load
+4. **Optimize slow queries**: Profile and optimize database queries
+
+### For Production Deployment
+
+1. **Use Multiple Workers**: Deploy with gunicorn/uvicorn workers
+2. **Migrate to PostgreSQL**: Better concurrency support
+3. **Implement Load Balancing**: Distribute requests across workers
+4. **Add Redis Caching**: Reduce database pressure
+5. **Connection Pooling**: Optimize database connections
+6. **Rate Limiting**: Protect against overload
+
+## Concurrency Limits Observed
+
+Based on these light load tests:
+
+EOF
+
+if [ $total_failed -eq 0 ]; then
+    cat >> "$REPORT_FILE" << EOF
+- ✅ System handles 10 concurrent reads on simple endpoints
+- ✅ System handles 8 concurrent reads on detail endpoints
+- ✅ System handles 5 concurrent reads on complex endpoints
+- ✅ System handles 3 concurrent reads on expensive operations
+
+The system is suitable for single-user or very light multi-user scenarios.
+
+EOF
+else
+    cat >> "$REPORT_FILE" << EOF
+- ⚠️ System shows failures under light concurrent load
+- Recommend investigating database locking and query optimization
+- Consider implementing request queuing or rate limiting
+
+EOF
+fi
+
+cat >> "$REPORT_FILE" << EOF
+
+## Next Steps
+
+1. **If tests passed**: System is suitable for development/single-user
+2. **If tests failed**: Investigate failures and optimize bottlenecks
+3. **Before production**: Migrate to production-grade deployment
+4. **Continuous monitoring**: Set up performance monitoring and alerting
+
+---
+*Generated by HomeRack Light Load Test Suite*
+EOF
+
+# Print summary
+print_color "$BLUE" "\n╔════════════════════════════════════════════════════════════╗"
+print_color "$BLUE" "║                  Test Summary                              ║"
+print_color "$BLUE" "╚════════════════════════════════════════════════════════════╝"
+echo ""
+print_color "$BLUE" "Total Requests:  $total_requests"
+print_color "$GREEN" "Successful:      $total_success"
+print_color "$RED" "Failed:          $total_failed"
+print_color "$BLUE" "Success Rate:    ${overall_success_rate}%"
+echo ""
+print_color "$BLUE" "Report saved to: $REPORT_FILE"
+
+# Exit with appropriate code
+if [ $total_failed -gt 0 ]; then
+    print_color "$RED" "\n⚠️  Some requests failed. Review the report for details."
+    exit 1
+else
+    print_color "$GREEN" "\n✅ All requests succeeded!"
+    exit 0
+fi

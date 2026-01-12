@@ -66,10 +66,15 @@ def get_circuit_breaker_status(breaker: CircuitBreaker) -> dict:
     if not breaker:
         return {"enabled": False}
 
+    # Get state - pybreaker returns it as a string
+    state = breaker.current_state
+    if hasattr(state, 'name'):
+        state = state.name
+
     return {
         "enabled": True,
         "name": breaker.name,
-        "state": breaker.current_state.name,
+        "state": str(state),
         "failure_count": breaker.fail_counter,
         "failure_threshold": breaker.fail_max,
         "reset_timeout": breaker._reset_timeout,

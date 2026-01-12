@@ -1,0 +1,132 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "HomeRack Precision Engineering" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - img [ref=e9]
+        - generic [ref=e11]:
+          - heading "HomeRack" [level=1] [ref=e12]
+          - paragraph [ref=e13]: Precision Engineering
+    - navigation [ref=e14]:
+      - link "Dashboard" [ref=e15] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e18]:
+          - img [ref=e20]
+          - generic [ref=e22]: Dashboard
+      - link "Racks" [ref=e23] [cursor=pointer]:
+        - /url: /racks
+        - generic [ref=e25]:
+          - img [ref=e27]
+          - generic [ref=e29]: Racks
+      - link "Devices" [ref=e30] [cursor=pointer]:
+        - /url: /devices
+        - generic [ref=e32]:
+          - img [ref=e34]
+          - generic [ref=e36]: Devices
+      - link "Connections" [ref=e37] [cursor=pointer]:
+        - /url: /connections
+        - generic [ref=e39]:
+          - img [ref=e41]
+          - generic [ref=e43]: Connections
+      - link "Thermal Analysis" [ref=e44] [cursor=pointer]:
+        - /url: /thermal
+        - generic [ref=e46]:
+          - img [ref=e48]
+          - generic [ref=e50]: Thermal Analysis
+      - link "Settings" [ref=e51] [cursor=pointer]:
+        - /url: /settings
+        - generic [ref=e53]:
+          - img [ref=e55]
+          - generic [ref=e58]: Settings
+    - generic [ref=e60]:
+      - generic [ref=e63]: System Online
+      - generic [ref=e64]: "API: Connected"
+  - generic [ref=e65]:
+    - banner [ref=e66]:
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - heading "Dashboard" [level=1] [ref=e69]
+          - paragraph [ref=e70]: System overview and monitoring
+        - generic [ref=e71]:
+          - generic [ref=e72]:
+            - textbox "Search..." [ref=e73]
+            - img [ref=e74]
+          - button "Refresh" [ref=e76]:
+            - img [ref=e77]
+            - text: Refresh
+          - button [ref=e79]:
+            - img [ref=e80]
+          - generic [ref=e83]:
+            - generic [ref=e84]:
+              - paragraph [ref=e85]: Admin
+              - paragraph [ref=e86]: admin@homerack.local
+            - generic [ref=e88]: A
+    - main [ref=e89]:
+      - generic [ref=e90]:
+        - generic [ref=e91]:
+          - heading "Welcome to HomeRack" [level=1] [ref=e92]
+          - paragraph [ref=e93]: Precision engineering for your data center infrastructure
+        - generic [ref=e94]:
+          - link "Total Racks 0" [ref=e95] [cursor=pointer]:
+            - /url: /racks
+            - generic [ref=e99]:
+              - generic [ref=e100]:
+                - paragraph [ref=e101]: Total Racks
+                - paragraph [ref=e102]: "0"
+              - img [ref=e104]
+          - link "Total Devices 0" [ref=e106] [cursor=pointer]:
+            - /url: /devices
+            - generic [ref=e110]:
+              - generic [ref=e111]:
+                - paragraph [ref=e112]: Total Devices
+                - paragraph [ref=e113]: "0"
+              - img [ref=e115]
+          - link "Active Devices 0" [ref=e117] [cursor=pointer]:
+            - /url: /devices
+            - generic [ref=e121]:
+              - generic [ref=e122]:
+                - paragraph [ref=e123]: Active Devices
+                - paragraph [ref=e124]: "0"
+              - img [ref=e126]
+          - link "Connections 0" [ref=e128] [cursor=pointer]:
+            - /url: /connections
+            - generic [ref=e132]:
+              - generic [ref=e133]:
+                - paragraph [ref=e134]: Connections
+                - paragraph [ref=e135]: "0"
+              - img [ref=e137]
+        - generic [ref=e139]:
+          - generic [ref=e141]:
+            - heading "Power Consumption" [level=3] [ref=e143]
+            - generic [ref=e145]:
+              - generic [ref=e147]: 0 W
+              - generic [ref=e148]:
+                - generic [ref=e149]:
+                  - paragraph [ref=e150]: Peak
+                  - paragraph [ref=e151]: 0 W
+                - generic [ref=e152]:
+                  - paragraph [ref=e153]: Avg per Device
+                  - paragraph [ref=e154]: 0 W
+          - generic [ref=e156]:
+            - heading "Thermal Overview" [level=3] [ref=e158]
+            - generic [ref=e160]:
+              - generic [ref=e161]:
+                - generic [ref=e162]: 0.0°C
+                - generic [ref=e163]: average
+              - generic [ref=e164]:
+                - generic [ref=e165]:
+                  - paragraph [ref=e166]: Hottest
+                  - paragraph [ref=e167]: 0°C
+                - generic [ref=e168]:
+                  - paragraph [ref=e169]: Coolest
+                  - paragraph [ref=e170]: 0°C
+        - generic [ref=e172]:
+          - heading "Recent Devices" [level=3] [ref=e174]
+          - generic [ref=e177]:
+            - paragraph [ref=e178]: No devices found
+            - link "Add your first device" [ref=e179] [cursor=pointer]:
+              - /url: /devices
+```

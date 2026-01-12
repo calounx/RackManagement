@@ -8,6 +8,8 @@ import type {
   RackCreate,
   DeviceCreate,
   ConnectionCreate,
+  NetBoxHealthResponse,
+  NetBoxImportResult,
 } from '../types';
 import { useDebugStore } from './debug-store';
 
@@ -413,6 +415,50 @@ class API {
   async searchDeviceSpecs(query: string): Promise<DeviceSpec[]> {
     const response = await this.client.get('/device-specs/search', {
       params: { q: query },
+    });
+    return response.data;
+  }
+
+  // ==================== NetBox DCIM Integration ====================
+
+  async checkNetBoxHealth(): Promise<NetBoxHealthResponse> {
+    const response = await this.client.get('/dcim/health');
+    return response.data;
+  }
+
+  async importRackFromNetBox(
+    rackName: string,
+    importDevices: boolean = true,
+    overwriteExisting: boolean = false
+  ): Promise<NetBoxImportResult> {
+    const response = await this.client.post('/dcim/import-rack', {
+      rack_name: rackName,
+      import_devices: importDevices,
+      overwrite_existing: overwriteExisting,
+    });
+    return response.data;
+  }
+
+  // ==================== Optimization ====================
+
+  async optimizeRack(
+    rackId: number,
+    lockedDeviceIds?: number[],
+    weights?: {
+      cable?: number;
+      weight?: number;
+      thermal?: number;
+      access?: number;
+    }
+  ): Promise<any> {
+    const response = await this.client.post(`/racks/${rackId}/optimize`, {
+      locked_positions: lockedDeviceIds || [],
+      weights: weights || {
+        cable: 0.30,
+        weight: 0.25,
+        thermal: 0.25,
+        access: 0.20
+      }
     });
     return response.data;
   }

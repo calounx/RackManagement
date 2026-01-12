@@ -427,3 +427,25 @@ export interface ModelInfo {
   created_at: string;
   updated_at: string;
 }
+
+// ==================== NetBox DCIM Integration ====================
+
+export interface NetBoxHealthResponse {
+  connected: boolean;
+  url: string | null;
+  message: string;
+}
+
+export interface NetBoxImportRequest {
+  rack_name: string;
+  import_devices?: boolean;
+  overwrite_existing?: boolean;
+}
+
+export interface NetBoxImportResult {
+  success: boolean;
+  rack_id: number;
+  rack_name: string;
+  devices_imported: number;
+  message: string;
+}

@@ -1,0 +1,25 @@
+[Unit]
+Description=HomeRack Application (Backend + Frontend)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/homerack
+ExecStartPre=/usr/bin/docker compose -f docker-compose.prod.yml pull --quiet
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+ExecReload=/usr/bin/docker compose -f docker-compose.prod.yml restart
+
+# Security
+User=calounx
+Group=calounx
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,73 @@
+# Multi-stage build for production-optimized FastAPI backend
+FROM python:3.11-slim AS builder
+
+# Install system dependencies for PDF parsing and OCR
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    poppler-utils \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies including Gunicorn for multiple workers
+RUN pip install --no-cache-dir --user -r requirements.txt && \
+    pip install --no-cache-dir --user gunicorn==21.2.0
+
+# Production stage
+FROM python:3.11-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    poppler-utils \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/data /app/uploads /app/uploads/brand_logos && \
+    chown -R appuser:appuser /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy Python dependencies from builder
+COPY --from=builder /root/.local /home/appuser/.local
+
+# Copy application code
+COPY --chown=appuser:appuser . .
+
+# Switch to non-root user
+USER appuser
+
+# Add local Python packages to PATH
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Run application with Gunicorn for multiple workers
+# Default to 4 workers, can be overridden via WORKERS env var
+# Using Uvicorn worker class for ASGI support
+CMD ["sh", "-c", "gunicorn app.main:app \
+    --workers ${WORKERS:-4} \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 0.0.0.0:8000 \
+    --timeout ${WORKER_TIMEOUT:-120} \
+    --graceful-timeout ${GRACEFUL_TIMEOUT:-30} \
+    --max-requests ${MAX_REQUESTS:-10000} \
+    --max-requests-jitter ${MAX_REQUESTS_JITTER:-1000} \
+    --worker-connections ${WORKER_CONNECTIONS:-1000} \
+    --log-level ${LOG_LEVEL:-info} \
+    --access-logfile - \
+    --error-logfile - \
+    --log-file -"]

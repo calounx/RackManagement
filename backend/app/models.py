@@ -360,3 +360,55 @@ class DCIMConnection(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# ============================================================================
+# Authentication Models - JWT-based authentication system
+# ============================================================================
+
+
+class UserRole(str, enum.Enum):
+    """User roles for RBAC"""
+    ADMIN = "admin"
+    USER = "user"
+    READONLY = "readonly"
+
+
+class User(Base):
+    """User model for authentication and authorization"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_login = Column(DateTime, nullable=True)
+
+    # Indexes for common queries
+    __table_args__ = (
+        Index("ix_users_email_active", "email", "is_active"),
+    )
+
+
+class TokenBlacklist(Base):
+    """Token blacklist for logout functionality"""
+    __tablename__ = "token_blacklist"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_jti = Column(String(255), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationship
+    user = relationship("User")
+
+    # Index for cleanup queries
+    __table_args__ = (
+        Index("ix_token_blacklist_expires", "expires_at"),
+    )

@@ -5,6 +5,7 @@ import { RackVisualizer } from '../components/rack/RackVisualizer';
 import { RackDialog } from '../components/rack/RackDialog';
 import { DeviceAssignDialog } from '../components/rack/DeviceAssignDialog';
 import { DeviceActionsMenu } from '../components/rack/DeviceActionsMenu';
+import { OptimizationDialog } from '../components/rack/OptimizationDialog';
 import { Button } from '../components/ui/button';
 import { IconButton } from '../components/ui/icon-button';
 import { Card } from '../components/ui/card';
@@ -19,6 +20,7 @@ import {
   Boxes,
   BarChart3,
   CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 
 export const Racks: React.FC = () => {
@@ -32,6 +34,7 @@ export const Racks: React.FC = () => {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignDialogUnit, setAssignDialogUnit] = useState<number | null>(null);
   const [deviceActionsOpen, setDeviceActionsOpen] = useState(false);
+  const [optimizationDialogOpen, setOptimizationDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchRacks();
@@ -242,10 +245,16 @@ export const Racks: React.FC = () => {
                       Click empty units to add devices, or click existing devices to manage them
                     </p>
                   </div>
-                  <Button variant="primary" onClick={() => handleAddDevice()}>
-                    <Plus className="w-4 h-4" />
-                    Add Device
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setOptimizationDialogOpen(true)}>
+                      <Sparkles className="w-4 h-4" />
+                      Optimize Layout
+                    </Button>
+                    <Button variant="primary" onClick={() => handleAddDevice()}>
+                      <Plus className="w-4 h-4" />
+                      Add Device
+                    </Button>
+                  </div>
                 </div>
                 <RackVisualizer
                   rack={currentRack}
@@ -306,6 +315,12 @@ export const Racks: React.FC = () => {
               currentRack={currentRack}
             />
           )}
+
+          <OptimizationDialog
+            rack={currentRack}
+            open={optimizationDialogOpen}
+            onOpenChange={setOptimizationDialogOpen}
+          />
         </>
       )}
     </div>

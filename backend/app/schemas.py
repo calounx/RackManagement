@@ -1,6 +1,7 @@
 """
 Pydantic schemas for API request/response validation
 """
+from __future__ import annotations
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -173,7 +174,7 @@ class DeviceResponse(DeviceBase):
     specification_id: Optional[int]
     model_id: Optional[int]
     specification: Optional[DeviceSpecificationResponse]
-    catalog_model: Optional['ModelResponse'] = Field(None, description="Catalog model details if model_id is set")
+    catalog_model: Optional[ModelResponse] = Field(None, description="Catalog model details if model_id is set")
     serial_number: Optional[str]
 
     class Config:
@@ -235,10 +236,34 @@ class RackResponse(RackBase):
         from_attributes = True
 
 
+# Rack Position Schemas
+class RackPositionBase(BaseModel):
+    """Base rack position schema"""
+    device_id: int
+    start_u: int = Field(..., ge=1, le=100)
+    locked: bool = False
+
+
+class RackPositionCreate(RackPositionBase):
+    """Schema for creating rack position"""
+    pass
+
+
+class RackPositionResponse(BaseModel):
+    """Schema for rack position response"""
+    id: int
+    device_id: int
+    rack_id: int
+    start_u: int
+    locked: bool
+    device: DeviceResponse
+
+    class Config:
+        from_attributes = True
 class RackLayoutResponse(BaseModel):
     """Schema for rack layout with positioned devices"""
     rack: RackResponse
-    positions: List['RackPositionResponse']
+    positions: List[RackPositionResponse]
     utilization_percent: float
     total_weight_kg: float
     total_power_watts: float
@@ -302,30 +327,6 @@ class ThermalAnalysisResponse(BaseModel):
     timestamp: datetime
 
 
-# Rack Position Schemas
-class RackPositionBase(BaseModel):
-    """Base rack position schema"""
-    device_id: int
-    start_u: int = Field(..., ge=1, le=100)
-    locked: bool = False
-
-
-class RackPositionCreate(RackPositionBase):
-    """Schema for creating rack position"""
-    pass
-
-
-class RackPositionResponse(BaseModel):
-    """Schema for rack position response"""
-    id: int
-    device_id: int
-    rack_id: int
-    start_u: int
-    locked: bool
-    device: DeviceResponse
-
-    class Config:
-        from_attributes = True
 
 
 # Connection Schemas
@@ -769,3 +770,142 @@ class ModelFetchRequest(BaseModel):
                 "device_type_id": 2
             }
         }
+
+
+# ============================================================================
+# NetBox DCIM Integration Schemas - Phase 4
+# ============================================================================
+
+class NetBoxHealthResponse(BaseModel):
+    """NetBox connection health check response"""
+    connected: bool = Field(..., description="Whether NetBox connection is healthy")
+    url: Optional[str] = Field(None, description="NetBox instance URL")
+    message: str = Field(..., description="Status message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "connected": True,
+                "url": "https://netbox.example.com",
+                "message": "NetBox connection successful"
+            }
+        }
+
+
+class NetBoxImportRequest(BaseModel):
+    """Request to import rack from NetBox"""
+    rack_name: str = Field(..., min_length=1, max_length=200, description="NetBox rack name to import")
+    import_devices: bool = Field(default=True, description="Import devices in rack")
+    overwrite_existing: bool = Field(default=False, description="Overwrite existing rack if found")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "rack_name": "DC1-R01",
+                "import_devices": True,
+                "overwrite_existing": False
+            }
+        }
+
+
+class NetBoxImportResult(BaseModel):
+    """Result of NetBox rack import operation"""
+    success: bool = Field(..., description="Whether import succeeded")
+    rack_id: int = Field(..., description="ID of imported/updated rack")
+    rack_name: str = Field(..., description="Name of imported rack")
+    devices_imported: int = Field(..., ge=0, description="Number of devices imported")
+    message: str = Field(..., description="Import result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "rack_id": 1,
+                "rack_name": "DC1-R01",
+                "devices_imported": 15,
+                "message": "Successfully imported rack 'DC1-R01' with 15 devices from NetBox"
+            }
+        }
+
+
+# Rebuild models to resolve forward references
+# These calls are needed because some models have forward references to classes defined later
+DeviceResponse.model_rebuild()  # Has forward reference to ModelResponse
+RackResponse.model_rebuild()    # Has forward reference to RackPositionResponse
+
+
+# ============================================================================
+# Authentication Schemas - JWT-based auth system
+# ============================================================================
+
+class UserRole(str, Enum):
+    """User roles for RBAC"""
+    ADMIN = "admin"
+    USER = "user"
+    READONLY = "readonly"
+
+
+class UserBase(BaseModel):
+    """Base user schema"""
+    email: str = Field(..., min_length=3, max_length=255, description="User email address")
+    full_name: Optional[str] = Field(None, max_length=255, description="User full name")
+
+
+class UserCreate(UserBase):
+    """Schema for creating a new user"""
+    password: str = Field(..., min_length=8, max_length=100, description="User password")
+    role: UserRole = Field(default=UserRole.USER, description="User role")
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating user"""
+    email: Optional[str] = Field(None, min_length=3, max_length=255, description="User email address")
+    full_name: Optional[str] = Field(None, max_length=255, description="User full name")
+    password: Optional[str] = Field(None, min_length=8, max_length=100, description="New password")
+    role: Optional[UserRole] = Field(None, description="User role")
+    is_active: Optional[bool] = Field(None, description="User active status")
+
+
+class UserResponse(UserBase):
+    """Schema for user response"""
+    id: int
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class UserLogin(BaseModel):
+    """Schema for user login"""
+    username: str = Field(..., min_length=3, description="Email address (username)")
+    password: str = Field(..., min_length=1, description="Password")
+
+
+class Token(BaseModel):
+    """Schema for JWT token response"""
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="JWT refresh token")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration in seconds")
+
+
+class TokenRefresh(BaseModel):
+    """Schema for refreshing access token"""
+    refresh_token: str = Field(..., description="JWT refresh token")
+
+
+class TokenPayload(BaseModel):
+    """Schema for JWT token payload"""
+    sub: int = Field(..., description="User ID (subject)")
+    exp: datetime = Field(..., description="Expiration time")
+    iat: datetime = Field(..., description="Issued at time")
+    type: str = Field(..., description="Token type (access or refresh)")
+
+
+class PasswordChange(BaseModel):
+    """Schema for changing password"""
+    current_password: str = Field(..., min_length=1, description="Current password")
+    new_password: str = Field(..., min_length=8, max_length=100, description="New password")

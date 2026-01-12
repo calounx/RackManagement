@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
 export interface DialogProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   title?: string;
   description?: string;
   children: React.ReactNode;
@@ -13,14 +15,19 @@ export interface DialogProps {
 }
 
 export const Dialog: React.FC<DialogProps> = ({
-  isOpen,
-  onClose,
+  isOpen: isOpenProp,
+  onClose: onCloseProp,
+  open: openProp,
+  onOpenChange,
   title,
   description,
   children,
   size = 'md',
   showClose = true,
 }) => {
+  // Support both naming conventions
+  const isOpen = isOpenProp !== undefined ? isOpenProp : (openProp !== undefined ? openProp : false);
+  const onClose = onCloseProp || (onOpenChange ? () => onOpenChange(false) : () => {});
   const sizes = {
     sm: 'max-w-md',
     md: 'max-w-lg',
@@ -121,6 +128,47 @@ export const Dialog: React.FC<DialogProps> = ({
     </AnimatePresence>
   );
 };
+
+// Subcomponents for more flexible dialog composition
+export const DialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
+  className,
+  ...props
+}) => (
+  <div
+    className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)}
+    {...props}
+  />
+);
+
+export const DialogTitle: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({
+  className,
+  ...props
+}) => (
+  <h2
+    className={cn('text-lg font-semibold leading-none tracking-tight', className)}
+    {...props}
+  />
+);
+
+export const DialogDescription: React.FC<React.HTMLAttributes<HTMLParagraphElement>> = ({
+  className,
+  ...props
+}) => (
+  <p
+    className={cn('text-sm text-muted-foreground', className)}
+    {...props}
+  />
+);
+
+export const DialogContent: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
+  className,
+  ...props
+}) => (
+  <div
+    className={cn('grid gap-4 py-4', className)}
+    {...props}
+  />
+);
 
 export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,

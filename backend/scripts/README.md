@@ -1,10 +1,187 @@
-# Homerack Migration Scripts
+# Homerack Backend Scripts
 
-This directory contains scripts for managing data migrations in the Homerack backend.
+This directory contains scripts for managing data migrations, seeding default data, and catalog management in the Homerack backend.
 
-## Scripts
+## Quick Start
 
-### 1. migrate_specs_to_catalog.py
+```bash
+# 1. Seed device types (9 predefined types)
+python3 scripts/seed_device_types.py
+
+# 2. Seed brands and models (15 brands, 56 models)
+python3 scripts/seed_brands_models.py --verbose
+
+# 3. Explore the catalog
+python3 scripts/list_catalog.py --stats
+
+# 4. View specific brand's models
+python3 scripts/list_catalog.py --brand cisco
+
+# 5. View specific device type's models
+python3 scripts/list_catalog.py --type switch
+```
+
+---
+
+## Table of Contents
+
+1. [Seed Scripts](#seed-scripts)
+   - [seed_device_types.py](#1-seed_device_typespy)
+   - [seed_brands_models.py](#2-seed_brands_modelspy)
+   - [list_catalog.py](#3-list_catalogpy)
+2. [Migration Scripts](#migration-scripts)
+   - [migrate_specs_to_catalog.py](#4-migrate_specs_to_catalogpy)
+   - [check_migration_status.py](#5-check_migration_statuspy)
+   - [test_migration.py](#6-test_migrationpy)
+
+---
+
+## Seed Scripts
+
+### 1. seed_device_types.py
+
+**Purpose**: Seed the 9 predefined device types into the database.
+
+**Usage**:
+```bash
+python3 scripts/seed_device_types.py
+```
+
+**Device Types Created**:
+- 🖥️ Server
+- 🔀 Switch
+- 📡 Router
+- 🛡️ Firewall
+- 💾 Storage
+- ⚡ PDU
+- 🔋 UPS
+- 🔌 Patch Panel
+- 📦 Other
+
+**Note**: This script is idempotent - it won't create duplicates if device types already exist.
+
+---
+
+### 2. seed_brands_models.py
+
+**Purpose**: Seed default brands and representative device models into the catalog.
+
+**Usage**:
+```bash
+# Normal seeding (creates data if not exists)
+python3 scripts/seed_brands_models.py
+
+# Preview without making changes
+python3 scripts/seed_brands_models.py --dry-run
+
+# Clear existing data and reseed
+python3 scripts/seed_brands_models.py --clear
+
+# Show detailed output
+python3 scripts/seed_brands_models.py --verbose
+
+# Clear and show details
+python3 scripts/seed_brands_models.py --clear --verbose
+```
+
+**Options**:
+- `--dry-run`: Preview what would be created without making changes
+- `--clear`: Remove all existing brands and models before seeding
+- `--verbose, -v`: Show detailed output during seeding
+
+**What Gets Seeded**:
+- **15 Brands**: Cisco, Dell, HPE, Juniper, Arista, Ubiquiti, Fortinet, Palo Alto, Supermicro, Synology, APC, Raritan, Eaton, MikroTik, Netgear
+- **56 Models**: Representative device models across all device types
+  - 15 Switches (Cisco Catalyst, Arista 7050S, Juniper EX4300, etc.)
+  - 12 Servers (Dell PowerEdge, HPE ProLiant, Supermicro, Cisco UCS)
+  - 8 Firewalls (Palo Alto PA series, Fortinet FortiGate)
+  - 7 Routers (Cisco ISR/ASR, Juniper MX, MikroTik CCR)
+  - 4 Storage (Dell PowerVault, Synology RackStation, HPE MSA)
+  - 6 PDUs (APC, Raritan, Eaton)
+  - 4 UPS (APC Smart-UPS, Eaton 5PX/9PX)
+
+**Data Includes**:
+- Full brand information (name, website, founded year, headquarters)
+- Complete model specifications (height, depth, weight, power, thermal)
+- Realistic port configurations
+- Airflow patterns
+- Mounting types
+
+**Documentation**: See [SEED_DATA_REFERENCE.md](SEED_DATA_REFERENCE.md) for complete list of all seeded data.
+
+---
+
+### 3. list_catalog.py
+
+**Purpose**: List and explore the device catalog (brands and models).
+
+**Usage**:
+```bash
+# List all brands with model counts (default)
+python3 scripts/list_catalog.py
+
+# List all brands with details
+python3 scripts/list_catalog.py --brands
+
+# List all models
+python3 scripts/list_catalog.py --models
+
+# List models for specific brand
+python3 scripts/list_catalog.py --brand cisco
+
+# List models for specific device type
+python3 scripts/list_catalog.py --type switch
+
+# Show detailed statistics
+python3 scripts/list_catalog.py --stats
+```
+
+**Options**:
+- `--brands`: Show all brands with detailed information
+- `--models`: Show all models with specifications
+- `--brand <slug>`: Filter models by brand slug (e.g., cisco, dell, hpe)
+- `--type <slug>`: Filter models by device type slug (e.g., switch, server, firewall)
+- `--stats`: Show comprehensive catalog statistics
+
+**Example Output**:
+```
+======================================================================
+CATALOG STATISTICS
+======================================================================
+
+Total Brands: 15
+Total Models: 56
+Total Device Types: 9
+
+Models per Brand:
+  Cisco Systems                             11 models
+  Dell Technologies                          6 models
+  Hewlett Packard Enterprise                 6 models
+  ...
+
+Models per Device Type:
+  🔀 Switch                                  15 models
+  🖥️ Server                                 12 models
+  🛡️ Firewall                                8 models
+  ...
+
+Height Distribution (U):
+  Min: 1.0U
+  Max: 7.0U
+  Average: 1.6U
+
+Power Consumption (W):
+  Min: 10.0W
+  Max: 5400.0W
+  Average: 728W
+  Total: 40047W
+```
+
+---
+
+## Migration Scripts
+
+### 4. migrate_specs_to_catalog.py
 
 **Purpose**: Migrate device specifications from the legacy `device_specifications` table to the new normalized `brands` and `models` catalog structure.
 
@@ -30,7 +207,7 @@ python3 scripts/migrate_specs_to_catalog.py --batch-size 50 --skip-duplicates
 
 ---
 
-### 2. check_migration_status.py
+### 5. check_migration_status.py
 
 **Purpose**: Check current migration status and catalog statistics.
 
@@ -55,7 +232,7 @@ python3 scripts/check_migration_status.py
 
 ---
 
-### 3. test_migration.py
+### 6. test_migration.py
 
 **Purpose**: Test migration script with sample data before running on production database.
 
