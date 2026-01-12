@@ -26,6 +26,8 @@ venv/
 ENV/
 env/
 .venv
+*-venv/
+test-venv/
 
 # Database
 *.db
@@ -45,6 +47,8 @@ homerack.db
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 
 # Logs
 *.log
@@ -57,6 +61,13 @@ logs/
 htmlcov/
 .tox/
 .hypothesis/
+test-results/
+playwright-report/
+**/test-results/
+
+# Generated reports (timestamped)
+**/performance_report_*.md
+**/load_test_report_*.md
 
 # Frontend (Node)
 node_modules/
